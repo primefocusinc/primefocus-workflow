@@ -4,7 +4,6 @@ import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.WriteResult;
-import org.primfocusinc.workflow.firestore.FirestoreService;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;

@@ -1,4 +1,4 @@
-package org.primfocusinc.workflow.service;
+package org.primfocusinc.workflow.api.service;
 
 import lombok.SneakyThrows;
 import lombok.val;

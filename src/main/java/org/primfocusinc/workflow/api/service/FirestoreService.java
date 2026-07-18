@@ -1,4 +1,4 @@
-package org.primfocusinc.workflow.service;
+package org.primfocusinc.workflow.api.service;
 
 import com.google.api.core.ApiFuture;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -19,6 +19,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -39,6 +40,39 @@ public class FirestoreService {
         FirebaseApp.initializeApp(options);
 
         firestore = FirestoreClient.getFirestore();
+    }
+
+    public <T> void save(String collection, String documentId, T data)
+            throws ExecutionException, InterruptedException {
+
+        firestore.collection(collection)
+                .document(documentId)
+                .set(data)
+                .get();
+    }
+
+    public <T> void update(String collection, String documentId, T data)
+            throws ExecutionException, InterruptedException {
+
+        firestore.collection(collection)
+                .document(documentId)
+                .update(data)
+                .get();
+    }
+
+    public Object findById(String collection, String documentId)
+            throws ExecutionException, InterruptedException {
+
+        DocumentSnapshot document = firestore.collection(collection)
+                .document(documentId)
+                .get()
+                .get();
+
+        if (!document.exists()) {
+            return null;
+        }
+
+        return document.getData();
     }
 
     public <T> T getDocument(String document, Class<T> tClass) {
@@ -70,7 +104,7 @@ public class FirestoreService {
         return result;
     }
 
-    public void postData(String document, Object data) {
+    public <T> void postData(String document, T data) {
         DocumentReference docRef = this.firestore.document(document);
         docRef.set(data);
     }

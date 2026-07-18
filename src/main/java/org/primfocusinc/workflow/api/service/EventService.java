@@ -1,6 +1,5 @@
 package org.primfocusinc.workflow.api.service;
 
-import org.primfocusinc.workflow.firestore.FirestoreService;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -14,7 +13,7 @@ public class EventService {
         this.firestoreService = firestoreService;
     }
 
-    public void saveEvent(String id, Map<String, Object> body) {
+    public void save(String id, Map<String, Object> body) {
 
     }
 }
