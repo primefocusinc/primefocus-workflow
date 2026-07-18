@@ -38,3 +38,7 @@ out/
 
 ### Google Cloud ###
 github-deploy-key.json
+
+### Firebase CLI ###
+firebase-debug.log
+.firebase/
