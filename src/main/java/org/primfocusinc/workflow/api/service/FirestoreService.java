@@ -8,6 +8,7 @@ import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
+import com.google.cloud.firestore.SetOptions;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.cloud.FirestoreClient;
@@ -18,6 +19,7 @@ import javax.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -56,11 +58,11 @@ public class FirestoreService {
 
         firestore.collection(collection)
                 .document(documentId)
-                .update(data)
+                .set(data, SetOptions.merge())
                 .get();
     }
 
-    public Object findById(String collection, String documentId)
+    public Map<String, Object> findById(String collection, String documentId)
             throws ExecutionException, InterruptedException {
 
         DocumentSnapshot document = firestore.collection(collection)
@@ -72,7 +74,33 @@ public class FirestoreService {
             return null;
         }
 
-        return document.getData();
+        Map<String, Object> data = new HashMap<>(document.getData());
+        data.putIfAbsent("id", document.getId());
+        return data;
+    }
+
+    public List<Map<String, Object>> findAll(String collection)
+            throws ExecutionException, InterruptedException {
+        QuerySnapshot querySnapshot = firestore.collection(collection)
+                .get()
+                .get();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (QueryDocumentSnapshot documentSnapshot : querySnapshot.getDocuments()) {
+            Map<String, Object> data = new HashMap<>(documentSnapshot.getData());
+            data.putIfAbsent("id", documentSnapshot.getId());
+            result.add(data);
+        }
+
+        return result;
+    }
+
+    public void delete(String collection, String documentId)
+            throws ExecutionException, InterruptedException {
+        firestore.collection(collection)
+                .document(documentId)
+                .delete()
+                .get();
     }
 
     public <T> T getDocument(String document, Class<T> tClass) {
