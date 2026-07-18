@@ -27,6 +27,14 @@ public class FirebaseConfig {
 
     @Bean
     FirebaseApp firebaseApp() throws IOException {
+        // FirebaseApp's registry is a JVM-global static, not scoped to this
+        // Spring ApplicationContext, so this guard isn't redundant with
+        // Spring's own singleton-bean handling: it protects against
+        // FirebaseApp.initializeApp() throwing "already exists" when more
+        // than one ApplicationContext is created in the same JVM (e.g. a
+        // test suite with multiple @SpringBootTest classes). This assumes
+        // every context in the JVM uses the same google.credentialsJson,
+        // which holds today since there's a single, fixed service account.
         List<FirebaseApp> existing = FirebaseApp.getApps();
         if (!existing.isEmpty()) {
             return existing.get(0);

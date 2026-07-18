@@ -36,7 +36,6 @@ public class FirebaseTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(FirebaseTokenAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String ROLES_CLAIM = "roles";
 
     private final FirebaseAuth firebaseAuth;
 
@@ -59,24 +58,30 @@ public class FirebaseTokenAuthenticationFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(
                         principal, null, toAuthorities(principal.roles()));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (FirebaseAuthException e) {
+            } catch (FirebaseAuthException | IllegalArgumentException e) {
+                // IllegalArgumentException covers malformed/empty tokens, which
+                // verifyIdToken throws synchronously rather than wrapping in a
+                // FirebaseAuthException. Either way, treat the request as
+                // unauthenticated and let the security filter chain decide.
                 log.debug("Rejected invalid Firebase ID token: {}", e.getMessage());
-                SecurityContextHolder.clearContext();
             }
         }
 
         filterChain.doFilter(request, response);
     }
 
-    @SuppressWarnings("unchecked")
     private static Set<String> extractRoles(FirebaseToken token) {
-        Object rawRoles = token.getClaims().get(ROLES_CLAIM);
+        Object rawRoles = token.getClaims().get(FirebaseClaims.ROLES_CLAIM);
         Set<String> roles = new HashSet<>();
         if (rawRoles instanceof List<?> list) {
             for (Object role : list) {
                 roles.add(String.valueOf(role));
             }
         } else if (rawRoles instanceof String role) {
+            // FirebaseUserAdminService always writes "roles" as a collection,
+            // but this claim can also be set manually (Firebase console/CLI,
+            // e.g. to bootstrap the first ADMIN before the app can do it) as
+            // a single string, so both shapes are accepted here.
             roles.add(role);
         }
         return roles;

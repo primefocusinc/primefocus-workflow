@@ -1,7 +1,9 @@
 package org.primfocusinc.workflow.api.controller;
 
+import com.google.firebase.auth.FirebaseAuthException;
 import org.primfocusinc.workflow.api.service.FirebaseUserAdminService;
 import org.primfocusinc.workflow.security.FirebaseUserDetails;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,12 +33,19 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<FirebaseUserDetails> me(@AuthenticationPrincipal FirebaseUserDetails principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         return ResponseEntity.ok(principal);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/users/{uid}/roles")
-    public ResponseEntity<Void> setRoles(@PathVariable String uid, @RequestBody Set<String> roles) throws Exception {
+    public ResponseEntity<Void> setRoles(@PathVariable String uid, @RequestBody Set<String> roles)
+            throws FirebaseAuthException {
+        if (roles == null || roles.isEmpty() || !FirebaseUserAdminService.ALLOWED_ROLES.containsAll(roles)) {
+            return ResponseEntity.badRequest().build();
+        }
         firebaseUserAdminService.setRoles(uid, roles);
         return ResponseEntity.noContent().build();
     }

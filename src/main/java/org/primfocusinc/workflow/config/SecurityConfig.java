@@ -1,6 +1,7 @@
 package org.primfocusinc.workflow.config;
 
 import com.google.firebase.auth.FirebaseAuth;
+import jakarta.servlet.http.HttpServletResponse;
 import org.primfocusinc.workflow.security.FirebaseTokenAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,6 +32,9 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(exceptionHandling -> exceptionHandling
+                .authenticationEntryPoint((request, response, authException) ->
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication required")))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll())
