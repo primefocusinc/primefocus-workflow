@@ -1,8 +1,8 @@
 FROM node:22-alpine AS frontend-build
 WORKDIR /app
-COPY Prime_Vision_Focus_GiveCamp/PVF_React_Frontend/package*.json ./
+COPY PVF_React_Frontend/package*.json ./
 RUN npm ci
-COPY Prime_Vision_Focus_GiveCamp/PVF_React_Frontend/ ./
+COPY PVF_React_Frontend/ ./
 RUN npm run build
 
 FROM gradle:9.2-jdk17 AS build
