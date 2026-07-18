@@ -103,24 +103,36 @@ Move the React frontend from the Spring Boot + Google Cloud Run container stack 
 
 ## Phase 3: GitHub Actions Deployment Workflow
 
-1. [ ] **Create `.github/workflows/deploy-firebase-hosting.yml`**
-   - Trigger: `workflow_dispatch` (same manual trigger style as the current Cloud Run workflow).
+1. [x] **Create `.github/workflows/deploy-firebase-hosting.yml`**
+   - Trigger: `workflow_dispatch` with a `channel` input (`live` or a preview channel name).
    - Steps:
      - Check out code.
-     - Set up Node.js 22.
+     - Set up Node.js 22 and cache `npm`.
      - `cd PVF_React_Frontend && npm ci && npm run build`.
-     - Authenticate to Firebase using a service account key stored in GitHub secrets.
-     - `firebase deploy --only hosting` (or `firestore:rules,hosting` if rules are ready).
-   - Do not remove the existing Cloud Run workflow yet.
+     - Deploy Firestore rules with `firebase-tools`.
+     - Deploy to Firebase Hosting (live or preview channel).
+   - The existing Cloud Run workflow is left in place for now.
 
-2. [ ] **Create Firebase Hosting deploy service account**
-   - In GCP, create a service account (e.g., `firebase-hosting-deploy-sa`) with the **Firebase Hosting Admin** role.
-   - Download a JSON key and add it to GitHub Secrets as `FIREBASE_SERVICE_ACCOUNT_KEY` (or similar).
-   - Store the project ID as a secret or hardcode it in the workflow if it is not sensitive.
+2. [x] **Configure GitHub secrets and variables**
+   - The existing `github-deploy-sa` service account is reused; it already has the required Firebase Hosting, Firestore, and Firebase roles.
+   - Add the following to the GitHub repository:
+
+     | Type | Name | Value / How to obtain |
+     |------|------|------------------------|
+     | Secret | `FIREBASE_SERVICE_ACCOUNT_KEY` | Full contents of `github-deploy-key.json` (the JSON key for `github-deploy-sa`) |
+     | Variable | `VITE_FIREBASE_API_KEY` | `AIzaSyBkxV72Jefo-ZN9HXTTAApzWPiAuB-fn7w` |
+     | Variable | `VITE_FIREBASE_AUTH_DOMAIN` | `prime-focus-services.firebaseapp.com` |
+     | Variable | `VITE_FIREBASE_PROJECT_ID` | `prime-focus-services` |
+     | Variable | `VITE_FIREBASE_STORAGE_BUCKET` | `prime-focus-services.firebasestorage.app` |
+     | Variable | `VITE_FIREBASE_MESSAGING_SENDER_ID` | `939430515884` |
+     | Variable | `VITE_FIREBASE_APP_ID` | `1:939430515884:web:372f7c363f4af4be55bb09` |
+
+   - To add these, go to **Settings → Secrets and variables → Actions** in the GitHub repository.
+   - The `VITE_FIREBASE_*` values are public Firebase config values, so they are stored as **Variables**, not secrets.
 
 3. [ ] **Test the workflow**
-   - Run the workflow manually from a feature branch or use a preview channel first.
-   - Verify the deployment URL works and the live channel is updated only when intended.
+   - Run the workflow manually from the Actions tab with `channel` set to a preview channel name (e.g., `ci-test`).
+   - Verify the deployment URL works and the live channel is updated only when `channel` is `live`.
 
 ## Phase 4: Parallel Testing (Firebase Hosting + Existing Cloud Run)
 
@@ -222,20 +234,20 @@ Move the React frontend from the Spring Boot + Google Cloud Run container stack 
 
 ## Open Questions / Decisions
 
-1. **Router**: Keep `HashRouter` or switch to `BrowserRouter`?
-2. **Admin bootstrap**: Manual Firestore document creation, or one-time Cloud Function/script?
-3. **Firestore rules for participants**: Should a basic user ever read their own participant record, or is that strictly admin/doctor only?
+1. **Router**: Keep `HashRouter` for the migration. The `firebase.json` rewrite rule is included for future `BrowserRouter` use.
+2. **Admin bootstrap**: Manual Firestore document creation (console approach) for the small fixed admin team.
+3. **Firestore rules for participants**: Strictly admin/doctor only for now. Basic users do not read participant records.
 4. **Custom domains**: Is a custom domain configured on Cloud Run that needs to be migrated to Firebase Hosting?
-5. **Preview channels**: Should every PR get a preview channel, or only manual deployments?
-6. **Container option**: Do you want to keep the frontend `Dockerfile` for local development / alternative hosting, or delete it entirely?
+5. **Preview channels**: Manual deployments via `workflow_dispatch` for now. PR preview channels can be added later if needed.
+6. **Container option**: Delete the frontend `Dockerfile` in Phase 5 since Firebase Hosting replaces it.
 
 ## Progress Tracker
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 1: Firebase Hosting Setup | Completed | Preview URL: https://prime-focus-services--preview-migration-oexm98dq.web.app |
-| Phase 2: Frontend Hardening | Not started | |
-| Phase 3: GitHub Actions Workflow | Not started | |
+| Phase 2: Frontend Hardening | Completed | Firestore rules deployed; first-admin bootstrap documented |
+| Phase 3: GitHub Actions Workflow | In progress | Workflow created; secrets/variables documented; test pending |
 | Phase 4: Parallel Testing | Not started | |
 | Phase 5: Remove Spring Boot/Cloud Run | Not started | |
 | Phase 6: Final Verification | Not started | |
