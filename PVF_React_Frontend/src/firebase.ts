@@ -3,13 +3,12 @@ import { getAuth, GoogleAuthProvider, type User } from 'firebase/auth'
 import { doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: '',
-  authDomain: 'prime-vision-focus-abe.firebaseapp.com',
-  projectId: 'prime-vision-focus-abe',
-  storageBucket: 'prime-vision-focus-abe.firebasestorage.app',
-  messagingSenderId: '1092941670344',
-  appId: '1:1092941670344:web:731a0827b94d330203c2fd',
-  measurementId: 'G-WEC0WKMHQQ',
+  apiKey: 'AIzaSyBkxV72Jefo-ZN9HXTTAApzWPiAuB-fn7w',
+  authDomain: 'prime-focus-services.firebaseapp.com',
+  projectId: 'prime-focus-services',
+  storageBucket: 'prime-focus-services.firebasestorage.app',
+  messagingSenderId: '939430515884',
+  appId: '1:939430515884:web:372f7c363f4af4be55bb09',
 }
 
 const app = initializeApp(firebaseConfig)
@@ -39,5 +38,5 @@ export async function createUserProfile(user: User, role?: UserRole) {
 }
 
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.warn('Firebase is not configured yet. Add your Vite env values before testing auth.')
+  console.warn('Firebase is not configured yet. Check the Firebase config values.')
 }
