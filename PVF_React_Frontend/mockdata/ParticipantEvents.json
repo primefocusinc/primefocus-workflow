@@ -1,0 +1,48 @@
+{
+  "participants": [
+    {
+      "email": "jane.doe@example.com",
+      "events": [
+        {
+          "id": "jane.doe@example.com-sample",
+          "participantEmail": "jane.doe@example.com",
+          "eventName": "Back to School Vision - 2026",
+          "eventDate": "2026-07-18",
+          "status": "active",
+          "stationStatuses": [
+            {
+              "id": "check-in",
+              "title": "Station 1 – Check-In",
+              "description": "Verify registration, confirm consent, and assign the participant ID.",
+              "status": "complete"
+            },
+            {
+              "id": "vision-screening",
+              "title": "Station 2 – Vision Screening",
+              "description": "Record vision screening results and route the participant to the next step.",
+              "status": "current"
+            },
+            {
+              "id": "eye-exam",
+              "title": "Station 3 – Comprehensive Eye Exam",
+              "description": "Provide a full exam and note prescription or referral outcomes.",
+              "status": "pending"
+            },
+            {
+              "id": "frame-selection",
+              "title": "Station 4 – Frame Selection",
+              "description": "Record prescription details and frame selections for ordering.",
+              "status": "pending"
+            },
+            {
+              "id": "vision-success",
+              "title": "Station 5 – Vision Success",
+              "description": "Confirm next steps, referrals, and follow-up resources before departure.",
+              "status": "pending"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

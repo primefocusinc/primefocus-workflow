@@ -1,0 +1,253 @@
+{
+  "collectionNames": {
+    "users": "Stores Firebase Auth users and app roles.",
+    "participants": "Stores participant registration/profile data.",
+    "events": "Stores event records for each participant.",
+    "stationStatuses": "Stores the station progress and outcomes for each event.",
+    "auditLogs": "Optional future collection for admin activity and history."
+  },
+  "exampleDocuments": {
+    "users": {
+      "uid": "firebase-auth-user-id",
+      "email": "staff@example.org",
+      "role": "admin",
+      "createdAt": "2026-07-18T10:00:00Z"
+    },
+    "participants": {
+      "id": "participant-001",
+      "participantType": "Child (Ages 5-17)",
+      "firstName": "Jordan",
+      "lastName": "Smith",
+      "dateOfBirth": "2014-05-18",
+      "ageAtEvent": 12,
+      "demographics": {
+        "gender": "Female",
+        "race": "Black or African American",
+        "ethnicity": "Not Hispanic or Latino",
+        "primaryLanguage": "English",
+        "veteranStatus": "No",
+        "lgbtqIdentity": "Prefer not to say",
+        "disabilityStatus": "No"
+      },
+      "guardian": {
+        "name": "Taylor Smith",
+        "relationship": "Parent",
+        "phoneNumber": "2165550144",
+        "email": "taylor.smith@example.org"
+      },
+      "contact": {
+        "preferredCommunication": "Text Message",
+        "phoneNumber": "2165550144",
+        "email": "taylor.smith@example.org"
+      },
+      "address": {
+        "streetAddress": "123 Main Street",
+        "city": "Cleveland",
+        "state": "OH",
+        "zipCode": "44114"
+      },
+      "school": {
+        "name": "Example Middle School",
+        "district": "Cleveland Metropolitan School District",
+        "currentGrade": "6"
+      },
+      "visionIntake": {
+        "wearsGlasses": "Yes",
+        "glassesStatus": "Broken",
+        "glassesStatusOther": "",
+        "wearsContacts": "No",
+        "lastEyeExam": "2023-09-01",
+        "eyeCareProvider": "Unknown",
+        "toldNeedsGlasses": "Yes",
+        "currentConcerns": [
+          "Difficulty seeing the board",
+          "Frequent headaches"
+        ],
+        "currentConcernsOther": ""
+      },
+      "insurance": {
+        "visionInsurance": "No",
+        "medicalInsuranceProvider": "CareSource"
+      },
+      "resourceInterests": [
+        "Food Assistance",
+        "Housing Support",
+        "Vision Care Resources"
+      ],
+      "resourceOther": "",
+      "referralSource": "School",
+      "consents": {
+        "consentToParticipate": true,
+        "photoVideoRelease": false,
+        "communicationAuthorization": true,
+        "acknowledgement": true,
+        "electronicSignature": "Taylor Smith",
+        "printedName": "Taylor Smith",
+        "signatureDate": "2026-07-18"
+      },
+      "checkedIn": false,
+      "createdAt": "2026-07-18T10:13:15Z",
+      "updatedAt": "2026-07-18T10:13:15Z"
+    },
+    "events": {
+      "id": "event-001",
+      "participantId": "participant-001",
+      "participantEmail": "taylor.smith@example.org",
+      "eventName": "Back to School Vision - 2026",
+      "eventDate": "2026-07-18",
+      "status": "active",
+      "createdAt": "2026-07-18T10:15:00Z",
+      "updatedAt": "2026-07-18T10:20:00Z"
+    },
+    "stationStatuses": {
+      "id": "station-status-001",
+      "eventId": "event-001",
+      "stationId": "check-in",
+      "title": "Station 1 - Check-In",
+      "description": "Verify registration, confirm consent, and assign the participant ID.",
+      "status": "complete",
+      "decision": null,
+      "printRequested": false,
+      "pboReferralConfirmed": false,
+      "frameSelection": ""
+    },
+    "stationStatusesVisionScreening": {
+      "id": "station-status-002",
+      "eventId": "event-001",
+      "stationId": "vision-screening",
+      "title": "Station 2 - Vision Screening",
+      "description": "Record vision screening results and route the participant to the next step.",
+      "status": "complete",
+      "decision": "PASS",
+      "printRequested": false,
+      "pboReferralConfirmed": false,
+      "frameSelection": ""
+    },
+    "stationStatusesEyeExam": {
+      "id": "station-status-003",
+      "eventId": "event-001",
+      "stationId": "eye-exam",
+      "title": "Station 3 - Comprehensive Eye Exam",
+      "description": "Provide a full exam and note prescription or referral outcomes.",
+      "status": "complete",
+      "decision": "REFERRAL",
+      "printRequested": false,
+      "pboReferralConfirmed": false,
+      "frameSelection": ""
+    },
+    "stationStatusesFrameSelection": {
+      "id": "station-status-004",
+      "eventId": "event-001",
+      "stationId": "frame-selection",
+      "title": "Station 4 - Frame Selection",
+      "description": "Record prescription details and frame selections for ordering.",
+      "status": "current",
+      "decision": null,
+      "printRequested": false,
+      "pboReferralConfirmed": true,
+      "frameSelection": ""
+    },
+    "stationStatusesVisionSuccess": {
+      "id": "station-status-005",
+      "eventId": "event-001",
+      "stationId": "vision-success",
+      "title": "Station 5 - Vision Success",
+      "description": "Confirm next steps, referrals, and follow-up resources before departure.",
+      "status": "pending",
+      "decision": null,
+      "printRequested": false,
+      "pboReferralConfirmed": false,
+      "frameSelection": ""
+    },
+    "auditLogs": {
+      "id": "audit-001",
+      "entityType": "event",
+      "entityId": "event-001",
+      "action": "station_updated",
+      "performedBy": "staff@example.org",
+      "timestamp": "2026-07-18T10:20:00Z",
+      "details": {
+        "stationId": "frame-selection",
+        "decision": "REFERRAL",
+        "pboReferralConfirmed": true
+      }
+    }
+  },
+  "recommendedFirestoreStructure": {
+    "users": [
+      "{ uid, email, role, createdAt }"
+    ],
+    "participants": [
+      "{ id, participantType, firstName, lastName, dateOfBirth, ageAtEvent, demographics, guardian, contact, address, school, visionIntake, insurance, resourceInterests, resourceOther, referralSource, consents, checkedIn, createdAt, updatedAt }"
+    ],
+    "events": [
+      "{ id, participantId, participantEmail, eventName, eventDate, status, createdAt, updatedAt }"
+    ],
+    "stationStatuses": [
+      "{ id, eventId, stationId, title, description, status, decision, printRequested, pboReferralConfirmed, frameSelection }"
+    ],
+    "auditLogs": [
+      "{ id, entityType, entityId, action, performedBy, timestamp, details }"
+    ]
+  },
+  "springBootEntityMapping": {
+    "Participant": {
+      "fields": [
+        "id",
+        "participantType",
+        "firstName",
+        "lastName",
+        "dateOfBirth",
+        "ageAtEvent",
+        "demographics",
+        "guardian",
+        "contact",
+        "address",
+        "school",
+        "visionIntake",
+        "insurance",
+        "resourceInterests",
+        "resourceOther",
+        "referralSource",
+        "consents",
+        "checkedIn",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Event": {
+      "fields": [
+        "id",
+        "participantId",
+        "participantEmail",
+        "eventName",
+        "eventDate",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StationStatus": {
+      "fields": [
+        "id",
+        "eventId",
+        "stationId",
+        "title",
+        "description",
+        "status",
+        "decision",
+        "printRequested",
+        "pboReferralConfirmed",
+        "frameSelection"
+      ]
+    },
+    "UserAccount": {
+      "fields": [
+        "uid",
+        "email",
+        "role",
+        "createdAt"
+      ]
+    }
+  }
+}

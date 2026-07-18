@@ -1,237 +1,771 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
+import type { ReactNode } from 'react'
 import Button from '@mui/material/Button'
 
-function Section({ title, note, children }: {
+type RegistrationForm = {
+  event: string
+  participantType: string
+  firstName: string
+  lastName: string
+  dateOfBirth: string
+  age: string
+  gender: string
+  race: string
+  ethnicity: string
+  primaryLanguage: string
+  veteranStatus: string
+  lgbtqIdentity: string
+  disabilityStatus: string
+  guardianName: string
+  guardianRelationship: string
+  guardianPhone: string
+  guardianEmail: string
+  streetAddress: string
+  city: string
+  state: string
+  zipCode: string
+  preferredCommunication: string
+  schoolName: string
+  schoolDistrict: string
+  currentGrade: string
+  wearsGlasses: string
+  glassesStatus: string
+  glassesStatusOther: string
+  wearsContacts: string
+  lastEyeExam: string
+  eyeCareProvider: string
+  toldNeedsGlasses: string
+  currentConcerns: string[]
+  currentConcernsOther: string
+  visionInsurance: string
+  medicalInsuranceProvider: string
+  resourceInterests: string[]
+  resourceOther: string
+  referralSource: string
+  consentParticipate: boolean
+  photoVideoRelease: boolean
+  communicationAuthorization: boolean
+  acknowledgement: boolean
+  electronicSignature: string
+  printedName: string
+  signatureDate: string
+}
+
+type ContactField = 'guardianPhone' | 'guardianEmail'
+
+const createInitialForm = (): RegistrationForm => ({
+  event: '',
+  participantType: '',
+  firstName: '',
+  lastName: '',
+  dateOfBirth: '',
+  age: '',
+  gender: '',
+  race: '',
+  ethnicity: '',
+  primaryLanguage: '',
+  veteranStatus: '',
+  lgbtqIdentity: '',
+  disabilityStatus: '',
+  guardianName: '',
+  guardianRelationship: '',
+  guardianPhone: '',
+  guardianEmail: '',
+  streetAddress: '',
+  city: '',
+  state: '',
+  zipCode: '',
+  preferredCommunication: '',
+  schoolName: '',
+  schoolDistrict: '',
+  currentGrade: '',
+  wearsGlasses: '',
+  glassesStatus: '',
+  glassesStatusOther: '',
+  wearsContacts: '',
+  lastEyeExam: '',
+  eyeCareProvider: '',
+  toldNeedsGlasses: '',
+  currentConcerns: [],
+  currentConcernsOther: '',
+  visionInsurance: '',
+  medicalInsuranceProvider: '',
+  resourceInterests: [],
+  resourceOther: '',
+  referralSource: '',
+  consentParticipate: false,
+  photoVideoRelease: false,
+  communicationAuthorization: false,
+  acknowledgement: false,
+  electronicSignature: '',
+  printedName: '',
+  signatureDate: new Date().toISOString().slice(0, 10),
+})
+
+const events = [
+  'Community Vision Event - September 12',
+  'Community Vision Event - October 10',
+  'Add me to the next available event',
+]
+
+const participantTypes = ['Child (Ages 5-17)', 'Adult (18+)']
+const communicationMethods = ['Phone', 'Text Message', 'Email']
+const yesNoUnsure = ['Yes', 'No', 'Unsure']
+const glassesStatuses = [
+  'In their possession and worn regularly',
+  'Broken',
+  'Lost',
+  'Left at home',
+  'No longer fit or prescription is outdated',
+  'Other',
+]
+const currentConcernOptions = [
+  'Difficulty seeing the board',
+  'Blurry vision',
+  'Frequent headaches',
+  'Squinting',
+  'Holds books or devices very close',
+  'Eye strain',
+  'Double vision',
+  'No current concerns',
+]
+const resourceOptions = [
+  'Food Assistance',
+  'Housing Resources',
+  'Employment Services',
+  'Financial Literacy',
+  'Health & Wellness Programs',
+  'Youth Programs',
+  'Veteran Resources',
+  'Senior Resources',
+  'Vision Care Resources',
+]
+
+const isContactField = (field: keyof RegistrationForm): field is ContactField =>
+  field === 'guardianPhone' || field === 'guardianEmail'
+const referralSources = [
+  'Social Media',
+  'School',
+  'Community Partner',
+  'Church/Faith Organization',
+  'Healthcare Provider',
+  'Friend/Family',
+  'Motorsure America',
+  'Prevent Blindness Ohio',
+  'Other',
+]
+
+function FieldLabel({ children, required = false }: { children: string; required?: boolean }) {
+  return (
+    <span className="text-sm font-semibold text-gray-800">
+      {children}
+      {required ? <span className="text-red-600"> *</span> : null}
+    </span>
+  )
+}
+
+function Section({
+  title,
+  eyebrow,
+  children,
+}: {
   title: string
-  note?: string
+  eyebrow: string
   children: ReactNode
 }) {
   return (
-    <section className="border-t pt-6 mt-6">
-      <h2 className="text-xl font-semibold text-blue-800">{title}</h2>
-      {note && <p className="mt-1 text-sm text-gray-600">{note}</p>}
-      <div className="mt-4 space-y-4">{children}</div>
+    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">{eyebrow}</p>
+      <h2 className="mt-1 text-xl font-bold text-blue-800">{title}</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">{children}</div>
     </section>
   )
 }
 
-function Field({ label, type = 'text', optional }: {
-  label: string
-  type?: string
-  optional?: boolean
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-800">
-        {label} {optional && <span className="text-gray-400">(Optional)</span>}
-      </span>
-      <input
-        type={type}
-        className="mt-1 w-full border rounded px-3 py-2"
-      />
-    </label>
-  )
-}
-
-function CheckRow({ label }: { label: string }) {
-  return (
-    <label className="flex items-center gap-2">
-      <input type="checkbox" />
-      <span className="text-gray-800">{label}</span>
-    </label>
-  )
-}
-
 export default function Registration() {
+  const [form, setForm] = useState<RegistrationForm>(() => createInitialForm())
   const [submitted, setSubmitted] = useState(false)
 
-  if (submitted) {
+  const isChild = form.participantType === 'Child (Ages 5-17)'
+  const phoneDigits = form.guardianPhone.replace(/\D/g, '')
+  const phoneInvalid =
+    form.guardianPhone.trim() !== '' &&
+    !(phoneDigits.length === 10 || (phoneDigits.length === 11 && phoneDigits.startsWith('1')))
+  const emailInvalid =
+    form.guardianEmail.trim() !== '' &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.guardianEmail.trim())
+  const requiredConsentComplete =
+    form.consentParticipate &&
+    form.communicationAuthorization &&
+    form.acknowledgement &&
+    form.electronicSignature.trim() &&
+    form.printedName.trim() &&
+    form.signatureDate
+
+  const requiredValues = useMemo(() => {
+    const requiredValues = [
+      form.event,
+      form.participantType,
+      form.firstName,
+      form.lastName,
+      form.dateOfBirth,
+      form.age,
+      form.preferredCommunication,
+      form.wearsGlasses,
+      form.wearsContacts,
+      form.toldNeedsGlasses,
+      form.visionInsurance,
+      form.referralSource,
+      form.electronicSignature,
+      form.printedName,
+      form.signatureDate,
+    ]
+
+    if (isChild) {
+      requiredValues.push(
+        form.guardianName,
+        form.guardianRelationship,
+        form.guardianPhone,
+        form.guardianEmail,
+        form.streetAddress,
+        form.city,
+        form.state,
+        form.zipCode,
+        form.schoolName,
+        form.schoolDistrict,
+        form.currentGrade,
+      )
+    }
+
+    return requiredValues
+  }, [form, isChild])
+
+  const requiredFieldsComplete = requiredValues.every(Boolean)
+
+  const completionCount = useMemo(() => {
+    const completedFields = requiredValues.filter(Boolean).length
+    const completedConsents = [
+      form.consentParticipate,
+      form.communicationAuthorization,
+      form.acknowledgement,
+    ].filter(Boolean).length
+
+    return `${completedFields + completedConsents}/${requiredValues.length + 3}`
+  }, [form, requiredValues])
+
+  const updateField = (field: keyof RegistrationForm, value: string | boolean | string[]) => {
+    setForm((current) => ({ ...current, [field]: value }))
+    setSubmitted(false)
+  }
+
+  const handleInput =
+    (field: keyof RegistrationForm) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      updateField(field, event.target.value)
+    }
+
+  const toggleArrayValue = (field: 'currentConcerns' | 'resourceInterests', value: string) => {
+    setForm((current) => {
+      const currentValues = current[field]
+      let nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value]
+
+      if (field === 'currentConcerns' && value === 'No current concerns' && !currentValues.includes(value)) {
+        nextValues = ['No current concerns']
+      }
+
+      if (field === 'currentConcerns' && value !== 'No current concerns') {
+        nextValues = nextValues.filter((item) => item !== 'No current concerns')
+      }
+
+      return { ...current, [field]: nextValues }
+    })
+    setSubmitted(false)
+  }
+
+  const handleReset = () => {
+    setForm(createInitialForm())
+    setSubmitted(false)
+  }
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!requiredFieldsComplete || phoneInvalid || emailInvalid) return
+    setSubmitted(true)
+  }
+
+  const inputClass = 'mt-1 w-full rounded border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100'
+  const selectClass = `${inputClass} bg-white`
+  const invalidInputClass = `${inputClass} border-red-500 bg-red-50 focus:border-red-600 focus:ring-red-100`
+  const canReviewRegistration = Boolean(requiredFieldsComplete && requiredConsentComplete && !phoneInvalid && !emailInvalid)
+
+  const renderContactInput = (field: ContactField, label: string, required = false) => {
+    const isPhone = field === 'guardianPhone'
+    const isEmail = field === 'guardianEmail'
+    const invalid = (isPhone && phoneInvalid) || (isEmail && emailInvalid)
+    const message = isPhone
+      ? 'Enter a valid 10-digit phone number.'
+      : 'Enter a valid email address, such as name@example.com.'
+
     return (
-      <div className="max-w-2xl mx-auto px-6 py-16 text-center">
-        <h1 className="text-3xl font-bold text-blue-800">Thank You!</h1>
-        <p className="mt-4 text-gray-700">
-          Thank you for registering with Prime Focus Inc. Your registration has been
-          received. Our team will review your information and contact you with updates
-          regarding your selected Community Vision Event.
-        </p>
-      </div>
+      <label key={field}>
+        <FieldLabel required={required}>{label}</FieldLabel>
+        <input
+          type={isEmail ? 'email' : isPhone ? 'tel' : 'text'}
+          value={String(form[field])}
+          onChange={handleInput(field)}
+          className={invalid ? invalidInputClass : inputClass}
+          required={required}
+          aria-invalid={invalid}
+          aria-describedby={invalid ? `${field}-error` : undefined}
+        />
+        {invalid ? (
+          <p id={`${field}-error`} className="mt-1 text-sm font-medium text-red-700">
+            {message}
+          </p>
+        ) : null}
+      </label>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold text-blue-800">Prime Focus Inc.</h1>
-      <p className="mt-1 text-gray-600">Community Vision Event Registration Form</p>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          setSubmitted(true)
-        }}
-      >
-        <Section title="Section 1 – Event Registration">
-          <Field label="Select the Community Vision Event you are registering for" />
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">Participant Type</legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="Child (Ages 5–17)" />
-              <CheckRow label="Adult (18+)" />
-            </div>
-            <p className="mt-2 text-sm text-gray-600">
-              Children ages 5–17 receive priority scheduling. Adults are welcome to
-              register and may be scheduled if appointment availability permits.
+    <main className="bg-gray-50">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-green-700">
+              Prime Focus Inc.
             </p>
-          </fieldset>
-        </Section>
-
-        <Section title="Section 2 – Participant Information">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Field label="First Name" />
-            <Field label="Last Name" />
-            <Field label="Date of Birth" type="date" />
-            <Field label="Age" type="number" />
-            <Field label="Gender" />
-            <Field label="Race" />
-            <Field label="Ethnicity" />
-            <Field label="Primary Language" />
-            <Field label="Veteran Status" />
-            <Field label="LGBTQ+ Identity" optional />
-            <Field label="Disability Status" optional />
+            <h1 className="mt-2 text-4xl font-bold text-blue-900">
+              Community Vision Event Registration
+            </h1>
+            <p className="mt-3 max-w-3xl text-gray-700">
+              Children ages 5-17 receive priority scheduling. Adults are welcome to register
+              and may be scheduled if appointment availability permits.
+            </p>
           </div>
-        </Section>
 
-        <Section title="Section 3 – Parent/Guardian Information" note="Required for minors.">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Field label="Parent/Guardian Name" />
-            <Field label="Relationship to Participant" />
-            <Field label="Phone Number" type="tel" />
-            <Field label="Email Address" type="email" />
-            <Field label="Street Address" />
-            <Field label="City" />
-            <Field label="State" />
-            <Field label="ZIP Code" />
-          </div>
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">
-              Preferred Method of Communication
-            </legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="Phone" />
-              <CheckRow label="Text Message" />
-              <CheckRow label="Email" />
-            </div>
-          </fieldset>
-        </Section>
-
-        <Section title="Section 4 – School Information" note="Children only.">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Field label="School Name" />
-            <Field label="School District" />
-            <Field label="Current Grade" />
-          </div>
-        </Section>
-
-        <Section title="Section 5 – Vision History">
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">
-              Does the participant currently wear glasses?
-            </legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="Yes" />
-              <CheckRow label="No" />
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">
-              If yes, are the glasses currently:
-            </legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="In their possession and worn regularly" />
-              <CheckRow label="Broken" />
-              <CheckRow label="Lost" />
-              <CheckRow label="Left at home" />
-              <CheckRow label="No longer fit or prescription is outdated" />
-              <CheckRow label="Other" />
-            </div>
-          </fieldset>
-          <p className="text-sm text-gray-600">
-            The condition or availability of your glasses will not prevent you from
-            receiving a vision screening or participating in this event.
-          </p>
-          <Field label="Date of Last Eye Exam" type="date" />
-          <Field label="Name of Eye Care Provider" optional />
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">
-              Is the participant currently experiencing any of the following?
-            </legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="Difficulty seeing the board" />
-              <CheckRow label="Blurry vision" />
-              <CheckRow label="Frequent headaches" />
-              <CheckRow label="Squinting" />
-              <CheckRow label="Holds books or devices very close" />
-              <CheckRow label="Eye strain" />
-              <CheckRow label="Double vision" />
-              <CheckRow label="No current concerns" />
-            </div>
-          </fieldset>
-        </Section>
-
-        <Section
-          title="Section 6 – Insurance Information"
-          note="Optional. Prime Focus Inc. will not bill your insurance, and your insurance status will not affect your eligibility to receive services."
-        >
-          <fieldset>
-            <legend className="text-sm font-medium text-gray-800">
-              Does the participant currently have vision insurance?
-            </legend>
-            <div className="mt-2 space-y-1">
-              <CheckRow label="Yes" />
-              <CheckRow label="No" />
-              <CheckRow label="Unsure" />
-            </div>
-          </fieldset>
-          <Field label="Medical Insurance Provider" optional />
-        </Section>
-
-        <Section title="Section 7 – Community Resource Interests" note="Optional.">
-          <div className="grid md:grid-cols-2 gap-1">
-            {[
-              'Food Assistance', 'Housing Resources', 'Employment Services',
-              'Financial Literacy', 'Health & Wellness Programs', 'Youth Programs',
-              'Veteran Resources', 'Senior Resources', 'Vision Care Resources', 'Other',
-            ].map((r) => <CheckRow key={r} label={r} />)}
-          </div>
-        </Section>
-
-        <Section title="Section 8 – How did you hear about this event?">
-          <div className="grid md:grid-cols-2 gap-1">
-            {[
-              'Social Media', 'School', 'Community Partner', 'Church/Faith Organization',
-              'Healthcare Provider', 'Friend/Family', 'Motorsure America',
-              'Prevent Blindness Ohio', 'Other',
-            ].map((r) => <CheckRow key={r} label={r} />)}
-          </div>
-        </Section>
-
-        <Section title="Section 9 – Consents & Authorizations">
-          <CheckRow label="Consent to Participate — I authorize Prime Focus Inc. and its licensed healthcare partners to conduct a vision screening and, if applicable, provide information regarding recommended follow-up care." />
-          <CheckRow label="Photo & Video Release — I grant permission for Prime Focus Inc. to photograph or record me and/or my child during the event for educational, promotional, fundraising, and marketing purposes." />
-          <CheckRow label="Communication Authorization — I authorize Prime Focus Inc. to contact me by phone, email, and/or text message regarding event updates, follow-up information, community resources, and future Prime Focus programs." />
-          <CheckRow label="Acknowledgement — I certify that the information provided is true and accurate to the best of my knowledge." />
-          <div className="grid md:grid-cols-2 gap-4 mt-4">
-            <Field label="Electronic Signature" />
-            <Field label="Printed Name" />
-            <Field label="Date" type="date" />
-          </div>
-        </Section>
-
-        <div className="mt-8">
-          <Button type="submit" variant="contained" color="primary">
-            Submit Registration
-          </Button>
+          <aside className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm">
+            <p className="text-sm font-semibold text-gray-700">Required progress</p>
+            <p className="mt-2 text-3xl font-bold text-blue-800">{completionCount}</p>
+            <p className="mt-2 text-sm text-gray-600">Preview mode. Information is not saved yet.</p>
+          </aside>
         </div>
-      </form>
-    </div>
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          <Section eyebrow="Section 1" title="Event Registration">
+            <label>
+              <FieldLabel required>Select the Community Vision Event</FieldLabel>
+              <select value={form.event} onChange={handleInput('event')} className={selectClass} required>
+                <option value="">Select an event</option>
+                {events.map((eventName) => (
+                  <option key={eventName} value={eventName}>{eventName}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <FieldLabel required>Participant Type</FieldLabel>
+              <select
+                value={form.participantType}
+                onChange={handleInput('participantType')}
+                className={selectClass}
+                required
+              >
+                <option value="">Select participant type</option>
+                {participantTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+          </Section>
+
+          <Section eyebrow="Section 2" title="Participant Information">
+            {[
+              ['firstName', 'First Name', true],
+              ['lastName', 'Last Name', true],
+              ['dateOfBirth', 'Date of Birth', true],
+              ['age', 'Age', true],
+              ['gender', 'Gender', false],
+              ['race', 'Race', false],
+              ['ethnicity', 'Ethnicity', false],
+              ['primaryLanguage', 'Primary Language', false],
+              ['veteranStatus', 'Veteran Status', false],
+              ['lgbtqIdentity', 'LGBTQ+ Identity (Optional)', false],
+              ['disabilityStatus', 'Disability Status (Optional)', false],
+            ].map(([field, label, required]) => (
+              <label key={String(field)}>
+                <FieldLabel required={Boolean(required)}>{String(label)}</FieldLabel>
+                <input
+                  type={field === 'dateOfBirth' ? 'date' : field === 'age' ? 'number' : 'text'}
+                  value={String(form[field as keyof RegistrationForm])}
+                  onChange={handleInput(field as keyof RegistrationForm)}
+                  className={inputClass}
+                  required={Boolean(required)}
+                />
+              </label>
+            ))}
+          </Section>
+
+          {isChild ? (
+            <>
+              <Section eyebrow="Section 3" title="Parent/Guardian Information">
+                {[
+                  ['guardianName', 'Parent/Guardian Name'],
+                  ['guardianRelationship', 'Relationship to Participant'],
+                  ['guardianPhone', 'Phone Number'],
+                  ['guardianEmail', 'Email Address'],
+                  ['streetAddress', 'Street Address'],
+                  ['city', 'City'],
+                  ['state', 'State'],
+                  ['zipCode', 'ZIP Code'],
+                ].map(([field, label]) => {
+                  const formField = field as keyof RegistrationForm
+
+                  return isContactField(formField)
+                    ? renderContactInput(formField, label, true)
+                    : (
+                      <label key={field}>
+                        <FieldLabel required>{label}</FieldLabel>
+                        <input
+                          value={String(form[formField])}
+                          onChange={handleInput(formField)}
+                          className={inputClass}
+                          required
+                        />
+                      </label>
+                    )
+                })}
+                <label>
+                  <FieldLabel required>Preferred Method of Communication</FieldLabel>
+                  <select
+                    value={form.preferredCommunication}
+                    onChange={handleInput('preferredCommunication')}
+                    className={selectClass}
+                    required
+                  >
+                    <option value="">Select a method</option>
+                    {communicationMethods.map((method) => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                </label>
+              </Section>
+
+              <Section eyebrow="Section 4" title="School Information">
+                {[
+                  ['schoolName', 'School Name'],
+                  ['schoolDistrict', 'School District'],
+                  ['currentGrade', 'Current Grade'],
+                ].map(([field, label]) => (
+                  <label key={field}>
+                    <FieldLabel required>{label}</FieldLabel>
+                    <input
+                      value={String(form[field as keyof RegistrationForm])}
+                      onChange={handleInput(field as keyof RegistrationForm)}
+                      className={inputClass}
+                      required
+                    />
+                  </label>
+                ))}
+              </Section>
+            </>
+          ) : (
+            <Section eyebrow="Section 3" title="Contact Information">
+              <label>
+                <FieldLabel required>Preferred Method of Communication</FieldLabel>
+                <select
+                  value={form.preferredCommunication}
+                  onChange={handleInput('preferredCommunication')}
+                  className={selectClass}
+                  required
+                >
+                  <option value="">Select a method</option>
+                  {communicationMethods.map((method) => (
+                    <option key={method} value={method}>{method}</option>
+                  ))}
+                </select>
+              </label>
+              {[
+                ['guardianPhone', 'Phone Number'],
+                ['guardianEmail', 'Email Address'],
+                ['streetAddress', 'Street Address'],
+                ['city', 'City'],
+                ['state', 'State'],
+                ['zipCode', 'ZIP Code'],
+              ].map(([field, label]) => {
+                const formField = field as keyof RegistrationForm
+
+                return isContactField(formField)
+                  ? renderContactInput(formField, label)
+                  : (
+                    <label key={field}>
+                      <FieldLabel>{label}</FieldLabel>
+                      <input
+                        value={String(form[formField])}
+                        onChange={handleInput(formField)}
+                        className={inputClass}
+                      />
+                    </label>
+                  )
+              })}
+            </Section>
+          )}
+
+          <Section eyebrow="Section 5" title="Vision History">
+            <label>
+              <FieldLabel required>Does the participant currently wear glasses?</FieldLabel>
+              <select value={form.wearsGlasses} onChange={handleInput('wearsGlasses')} className={selectClass} required>
+                <option value="">Select one</option>
+                {yesNoUnsure.slice(0, 2).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            {form.wearsGlasses === 'Yes' ? (
+              <>
+                <label>
+                  <FieldLabel>If yes, are the glasses currently:</FieldLabel>
+                  <select value={form.glassesStatus} onChange={handleInput('glassesStatus')} className={selectClass}>
+                    <option value="">Select status</option>
+                    {glassesStatuses.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </label>
+                {form.glassesStatus === 'Other' ? (
+                  <label>
+                    <FieldLabel>Other glasses status</FieldLabel>
+                    <input value={form.glassesStatusOther} onChange={handleInput('glassesStatusOther')} className={inputClass} />
+                  </label>
+                ) : null}
+              </>
+            ) : null}
+
+            <label>
+              <FieldLabel required>Does the participant wear contact lenses?</FieldLabel>
+              <select value={form.wearsContacts} onChange={handleInput('wearsContacts')} className={selectClass} required>
+                <option value="">Select one</option>
+                {yesNoUnsure.slice(0, 2).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <FieldLabel>Date of Last Eye Exam</FieldLabel>
+              <input type="date" value={form.lastEyeExam} onChange={handleInput('lastEyeExam')} className={inputClass} />
+            </label>
+
+            <label>
+              <FieldLabel>Name of Eye Care Provider (Optional)</FieldLabel>
+              <input value={form.eyeCareProvider} onChange={handleInput('eyeCareProvider')} className={inputClass} />
+            </label>
+
+            <label>
+              <FieldLabel required>Has the participant ever been told they need glasses?</FieldLabel>
+              <select
+                value={form.toldNeedsGlasses}
+                onChange={handleInput('toldNeedsGlasses')}
+                className={selectClass}
+                required
+              >
+                <option value="">Select one</option>
+                {yesNoUnsure.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <fieldset className="md:col-span-2">
+              <legend className="text-sm font-semibold text-gray-800">
+                Is the participant currently experiencing any of the following?
+              </legend>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {currentConcernOptions.map((concern) => (
+                  <label key={concern} className="flex items-start gap-2 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={form.currentConcerns.includes(concern)}
+                      onChange={() => toggleArrayValue('currentConcerns', concern)}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-gray-700">{concern}</span>
+                  </label>
+                ))}
+              </div>
+              <input
+                value={form.currentConcernsOther}
+                onChange={handleInput('currentConcernsOther')}
+                placeholder="Other concern"
+                className={`${inputClass} mt-3`}
+              />
+            </fieldset>
+
+            <p className="rounded bg-blue-50 p-3 text-sm text-blue-900 md:col-span-2">
+              The condition or availability of glasses will not prevent participation in the event.
+            </p>
+          </Section>
+
+          <Section eyebrow="Section 6" title="Insurance Information">
+            <div className="rounded bg-green-50 p-3 text-sm text-green-900 md:col-span-2">
+              Insurance information is optional, collected for program planning and reporting only.
+              Prime Focus Inc. will not bill insurance, and insurance status will not affect eligibility.
+            </div>
+            <label>
+              <FieldLabel required>Does the participant currently have vision insurance?</FieldLabel>
+              <select
+                value={form.visionInsurance}
+                onChange={handleInput('visionInsurance')}
+                className={selectClass}
+                required
+              >
+                <option value="">Select one</option>
+                {yesNoUnsure.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel>Medical Insurance Provider (Optional)</FieldLabel>
+              <input
+                value={form.medicalInsuranceProvider}
+                onChange={handleInput('medicalInsuranceProvider')}
+                className={inputClass}
+              />
+            </label>
+          </Section>
+
+          <Section eyebrow="Section 7" title="Community Resource Interests">
+            <fieldset className="md:col-span-2">
+              <legend className="text-sm font-semibold text-gray-800">
+                Would you like information about any of the following community resources?
+              </legend>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {resourceOptions.map((resource) => (
+                  <label key={resource} className="flex items-start gap-2 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={form.resourceInterests.includes(resource)}
+                      onChange={() => toggleArrayValue('resourceInterests', resource)}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-gray-700">{resource}</span>
+                  </label>
+                ))}
+              </div>
+              <input
+                value={form.resourceOther}
+                onChange={handleInput('resourceOther')}
+                placeholder="Other resource interest"
+                className={`${inputClass} mt-3`}
+              />
+            </fieldset>
+          </Section>
+
+          <Section eyebrow="Section 8" title="How did you hear about this event?">
+            <label className="md:col-span-2">
+              <FieldLabel required>Referral Source</FieldLabel>
+              <select value={form.referralSource} onChange={handleInput('referralSource')} className={selectClass} required>
+                <option value="">Select one</option>
+                {referralSources.map((source) => (
+                  <option key={source} value={source}>{source}</option>
+                ))}
+              </select>
+            </label>
+          </Section>
+
+          <Section eyebrow="Section 9" title="Consents & Authorizations">
+            <div className="space-y-3 md:col-span-2">
+              {[
+                [
+                  'consentParticipate',
+                  'Consent to Participate',
+                  'I authorize Prime Focus Inc. and its licensed healthcare partners to conduct a vision screening and, if applicable, provide information regarding recommended follow-up care.',
+                  true,
+                ],
+                [
+                  'photoVideoRelease',
+                  'Photo & Video Release',
+                  'I grant permission for Prime Focus Inc. to photograph or record me and/or my child during the event for educational, promotional, fundraising, and marketing purposes.',
+                  false,
+                ],
+                [
+                  'communicationAuthorization',
+                  'Communication Authorization',
+                  'I authorize Prime Focus Inc. to contact me by phone, email, and/or text message regarding event updates, follow-up information, community resources, and future Prime Focus programs.',
+                  true,
+                ],
+                [
+                  'acknowledgement',
+                  'Acknowledgement',
+                  'I certify that the information provided is true and accurate to the best of my knowledge.',
+                  true,
+                ],
+              ].map(([field, title, body, required]) => (
+                <label key={String(field)} className="flex gap-3 rounded border border-gray-200 bg-gray-50 p-3">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form[field as keyof RegistrationForm])}
+                    onChange={(event) => updateField(field as keyof RegistrationForm, event.target.checked)}
+                    required={Boolean(required)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-semibold text-gray-900">
+                      {String(title)}{required ? <span className="text-red-600"> *</span> : null}
+                    </span>
+                    <span className="text-sm text-gray-700">{String(body)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <label>
+              <FieldLabel required>Electronic Signature</FieldLabel>
+              <input value={form.electronicSignature} onChange={handleInput('electronicSignature')} className={inputClass} required />
+            </label>
+            <label>
+              <FieldLabel required>Printed Name</FieldLabel>
+              <input value={form.printedName} onChange={handleInput('printedName')} className={inputClass} required />
+            </label>
+            <label>
+              <FieldLabel required>Date</FieldLabel>
+              <input type="date" value={form.signatureDate} onChange={handleInput('signatureDate')} className={inputClass} required />
+            </label>
+          </Section>
+
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="text-lg font-bold text-blue-900">Registration Preview</h2>
+              <p className="text-sm text-gray-600">
+                This page is ready for review. Submission currently confirms the preview only.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button type="button" variant="outlined" onClick={handleReset}>
+                Reset
+              </Button>
+              <Button type="submit" variant="contained" disabled={!canReviewRegistration}>
+                Review Registration
+              </Button>
+            </div>
+          </div>
+        </form>
+
+        {submitted ? (
+          <section className="mt-6 rounded-lg border border-green-200 bg-green-50 p-5">
+            <h2 className="text-xl font-bold text-green-900">Registration preview received</h2>
+            <p className="mt-2 text-green-900">
+              {form.firstName} {form.lastName} is registered in preview for {form.event || 'the selected event'}.
+              No data has been saved or sent.
+            </p>
+          </section>
+        ) : null}
+      </div>
+    </main>
   )
 }
