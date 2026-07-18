@@ -21,32 +21,32 @@ Move the React frontend from the Spring Boot + Google Cloud Run container stack 
 
 ## Prerequisites
 
-- [ ] Firebase project `prime-vision-focus-abe` has Hosting enabled.
-- [ ] Local `firebase-tools` CLI installed (`npm install -g firebase-tools` or use `npx firebase-tools`).
-- [ ] Owner/Editor access to the Firebase project and the GCP project `prime-focus-services`.
+- [x] Firebase project `prime-focus-services` has Hosting enabled.
+- [x] Local `firebase-tools` CLI installed (`npm install -g firebase-tools` or use `npx firebase-tools`).
+- [x] Owner/Editor access to the Firebase project and the GCP project `prime-focus-services`.
 - [ ] GitHub repository has permission to add/update repository secrets and Actions workflows.
 
 ## Phase 1: Firebase Hosting Setup (No Code Changes to App Logic)
 
-1. [ ] **Initialize Firebase Hosting in the repo root**
-   - Run `firebase init hosting` (or `npx firebase-tools init hosting`).
-   - Select the existing Firebase project `prime-vision-focus-abe`.
+1. [x] **Initialize Firebase Hosting in the repo root**
+   - Created `firebase.json` and `.firebaserc` manually (equivalent to `firebase init hosting`).
+   - Selected the Firebase project `prime-focus-services`.
    - Set public directory to `PVF_React_Frontend/dist`.
-   - Configure as a single-page app (yes to rewrite all URLs to `index.html`).
-   - Do **not** enable GitHub Actions deploy yet; we will configure the workflow manually.
+   - Configured as a single-page app (rewrite all URLs to `index.html`).
+   - GitHub Actions deploy will be configured manually in Phase 3.
 
-2. [ ] **Review and commit generated files**
+2. [x] **Review and commit generated files**
    - `firebase.json` (hosting configuration)
    - `.firebaserc` (project alias)
-   - Add both to version control.
+   - Both added to version control.
 
-3. [ ] **Verify local build output**
+3. [x] **Verify local build output**
    - `cd PVF_React_Frontend && npm ci && npm run build`
-   - Confirm `dist/` exists and contains `index.html`, JS, and CSS assets.
+   - Confirmed `dist/` exists and contains `index.html`, JS, and CSS assets.
 
-4. [ ] **First manual deploy to Firebase Hosting (preview channel recommended)**
+4. [x] **First manual deploy to Firebase Hosting (preview channel recommended)**
    - `firebase hosting:channel:deploy preview-migration --expires 7d`
-   - Verify the preview URL serves the app and the `HashRouter` routes work.
+   - Preview URL: https://prime-focus-services--preview-migration-oexm98dq.web.app
    - Do **not** promote to the live channel until final testing.
 
 ## Phase 2: Frontend Hardening
@@ -280,7 +280,7 @@ Move the React frontend from the Spring Boot + Google Cloud Run container stack 
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Phase 1: Firebase Hosting Setup | Not started | |
+| Phase 1: Firebase Hosting Setup | Completed | Preview URL: https://prime-focus-services--preview-migration-oexm98dq.web.app |
 | Phase 2: Frontend Hardening | Not started | |
 | Phase 3: GitHub Actions Workflow | Not started | |
 | Phase 4: Parallel Testing | Not started | |
