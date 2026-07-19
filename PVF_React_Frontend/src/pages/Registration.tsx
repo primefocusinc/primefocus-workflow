@@ -51,7 +51,6 @@ type RegistrationForm = {
   photoVideoRelease: boolean
   communicationAuthorization: boolean
   acknowledgement: boolean
-  electronicSignature: string
   printedName: string
   signatureDate: string
 }
@@ -114,7 +113,6 @@ const createInitialForm = (): RegistrationForm => ({
   photoVideoRelease: false,
   communicationAuthorization: false,
   acknowledgement: false,
-  electronicSignature: '',
   printedName: '',
   signatureDate: new Date().toISOString().slice(0, 10),
 })
@@ -244,7 +242,6 @@ const createRegistrationSubmissionPayload = (form: RegistrationForm): Registrati
         photoVideoRelease: form.photoVideoRelease,
         communicationAuthorization: form.communicationAuthorization,
         acknowledgement: form.acknowledgement,
-        electronicSignature: normalizeText(form.electronicSignature),
         printedName: normalizeText(form.printedName),
         signatureDate: form.signatureDate,
       },
@@ -407,7 +404,6 @@ export default function Registration() {
     form.consentParticipate &&
     form.communicationAuthorization &&
     form.acknowledgement &&
-    form.electronicSignature.trim() &&
     form.printedName.trim() &&
     form.signatureDate
 
@@ -425,7 +421,6 @@ export default function Registration() {
       form.visionInsurance,
       form.referralSource,
       form.guardianEmail,
-      form.electronicSignature,
       form.printedName,
       form.signatureDate,
     ]
@@ -954,11 +949,6 @@ export default function Registration() {
                 </label>
               ))}
             </div>
-
-            <label>
-              <FieldLabel required>Electronic Signature</FieldLabel>
-              <input value={form.electronicSignature} onChange={handleInput('electronicSignature')} className={inputClass} required />
-            </label>
             <label>
               <FieldLabel required>Printed Name</FieldLabel>
               <input value={form.printedName} onChange={handleInput('printedName')} className={inputClass} required />

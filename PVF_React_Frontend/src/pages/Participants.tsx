@@ -647,11 +647,294 @@ export default function Participants() {
       return;
     }
 
-    const stationDetails = event.stationStatuses
-      .map(station => `- ${station.title}: ${station.status === 'complete' || station.status === 'skipped' ? 'Completed' : 'Pending'}${station.decision ? ` | Decision: ${station.decision}` : ''}`)
-      .join('\n');
+    const sanitize = (value: unknown) => String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
 
-    printWindow.document.write(`<!doctype html><html><head><title>Station Summary</title><style>body{font-family:Arial,sans-serif;padding:24px;}h1{margin-bottom:8px;}pre{white-space:pre-wrap;}</style></head><body><h1>Participant Station Summary</h1><p><strong>Participant:</strong> ${event.participantEmail}</p><p><strong>Event:</strong> ${event.eventName}</p><pre>${stationDetails}</pre></body></html>`);
+    const display = (value: unknown) => sanitize(value || '');
+    const mark = (checked: boolean) => checked ? '[X]' : '[ ]';
+    const isYes = (value: string | undefined) => (value ?? '').toLowerCase() === 'yes';
+    const isNo = (value: string | undefined) => (value ?? '').toLowerCase() === 'no';
+
+    const eyeExam = event.stationStatuses.find(station => station.id === 'eye-exam');
+    const frameSelection = event.stationStatuses.find(station => station.id === 'frame-selection');
+
+    const communication = (participantProfile.contact.preferredCommunication || '').toLowerCase();
+    const selectedCommunication = {
+      phone: communication.includes('phone'),
+      text: communication.includes('text'),
+      email: communication.includes('email')
+    };
+
+    const printHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Vision Screening Form</title>
+  <style>
+    :root {
+      --ink: #1f2937;
+      --muted: #4b5563;
+      --line: #d1d5db;
+      --accent: #0f4c81;
+      --paper: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.3;
+    }
+
+    .sheet {
+      max-width: 900px;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      padding: 20px 20px 24px;
+    }
+
+    .heading {
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.3px;
+      color: var(--accent);
+    }
+
+    .subhead {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    h2 {
+      margin: 16px 0 8px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 8px 14px;
+      font-size: 13px;
+      align-items: end;
+    }
+
+    .label {
+      font-weight: 600;
+    }
+
+    .value {
+      border-bottom: 1px solid var(--line);
+      min-height: 19px;
+      padding: 2px 2px 3px;
+    }
+
+    .checks {
+      display: flex;
+      gap: 18px;
+      font-size: 13px;
+      margin: 3px 0 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 6px;
+      vertical-align: middle;
+      text-align: left;
+    }
+
+    th {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    .line-block {
+      min-height: 16px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 8px;
+    }
+
+    .staff-notes {
+      min-height: 78px;
+      border: 1px solid var(--line);
+      margin-top: 6px;
+      padding: 6px;
+      white-space: pre-wrap;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+      }
+
+      .sheet {
+        border: none;
+        max-width: none;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="heading">
+      <h1>Participant Vision Screening Form</h1>
+      <div class="subhead">Event: ${display(event.eventName)} | Date: ${display(event.eventDate)} | Email: ${display(event.participantEmail)}</div>
+    </div>
+
+    <h2>Participant Information</h2>
+    <div class="field-grid">
+      <div class="label">First Name</div><div class="value">${display(participantProfile.firstName)}</div>
+      <div class="label">Last Name</div><div class="value">${display(participantProfile.lastName)}</div>
+      <div class="label">Date of Birth</div><div class="value">${display(participantProfile.dateOfBirth)}</div>
+      <div class="label">Age</div><div class="value">${display(participantProfile.ageAtEvent)}</div>
+      <div class="label">Gender</div><div class="value">${display(participantProfile.demographics.gender)}</div>
+    </div>
+
+    <h2>Parent/Guardian Information (Required for Minors)</h2>
+    <div class="field-grid">
+      <div class="label">Parent/Guardian Name</div><div class="value">${display(participantProfile.guardian.name)}</div>
+      <div class="label">Relationship to Participant</div><div class="value">${display(participantProfile.guardian.relationship)}</div>
+      <div class="label">Phone Number</div><div class="value">${display(participantProfile.contact.phoneNumber || participantProfile.guardian.phoneNumber)}</div>
+      <div class="label">Email Address</div><div class="value">${display(participantProfile.contact.email || participantProfile.guardian.email)}</div>
+      <div class="label">Street Address</div><div class="value">${display(participantProfile.address.streetAddress)}</div>
+      <div class="label">City</div><div class="value">${display(participantProfile.address.city)}</div>
+      <div class="label">State</div><div class="value">${display(participantProfile.address.state)}</div>
+      <div class="label">ZIP Code</div><div class="value">${display(participantProfile.address.zipCode)}</div>
+    </div>
+
+    <h2>Preferred Method of Communication</h2>
+    <div class="checks">
+      <span>${mark(selectedCommunication.phone)} Phone</span>
+      <span>${mark(selectedCommunication.text)} Text Message</span>
+      <span>${mark(selectedCommunication.email)} Email</span>
+    </div>
+
+    <h2>Vision History</h2>
+    <div class="checks">
+      <span>Does the participant currently wear glasses?</span>
+      <span>${mark(isYes(participantProfile.visionIntake.wearsGlasses))} Yes</span>
+      <span>${mark(isNo(participantProfile.visionIntake.wearsGlasses))} No</span>
+    </div>
+    <div class="checks">
+      <span>Does the participant wear contact lenses?</span>
+      <span>${mark(isYes(participantProfile.visionIntake.wearsContacts))} Yes</span>
+      <span>${mark(isNo(participantProfile.visionIntake.wearsContacts))} No</span>
+    </div>
+
+    <h2>Screening Station Results</h2>
+    <div class="checks">
+      <span>Wearing glasses during screening?</span>
+      <span>${mark(isYes(participantProfile.visionIntake.wearsGlasses))} Y</span>
+      <span>${mark(isNo(participantProfile.visionIntake.wearsGlasses))} N</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Eye</th>
+          <th>Visual Acuity (before correction)</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Right (OD)</td>
+          <td>____/____</td>
+          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+        </tr>
+        <tr>
+          <td>Left (OS)</td>
+          <td>____/____</td>
+          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+        </tr>
+        <tr>
+          <td>Both (OU)</td>
+          <td>____/____</td>
+          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Exam Station</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Eye</th>
+          <th>Sphere</th>
+          <th>Cylinder</th>
+          <th>Axis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Right</td>
+          <td></td>
+          <td></td>
+          <td>X</td>
+        </tr>
+        <tr>
+          <td>Left</td>
+          <td></td>
+          <td></td>
+          <td>X</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Eyeglasses should be worn</h2>
+    <div class="checks">
+      <span>[ ] Distance</span>
+      <span>[ ] Reading</span>
+      <span>[ ] Classwork Only</span>
+      <span>[ ] Full-Time</span>
+    </div>
+
+    <h2>Notes</h2>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+    <div class="line-block"></div>
+
+    <h2>Frame Selection Station</h2>
+    <div class="field-grid">
+      <div class="label">Frame Selection</div><div class="value">${display(frameSelection?.frameSelection ?? '')}</div>
+    </div>
+
+    <h2>Staff Notes</h2>
+    <div class="staff-notes">Screening Decision: ${display(stationTwo.decision)}
+Exam Outcome: ${display(eyeExam?.decision ?? '')}</div>
+  </div>
+</body>
+</html>`;
+
+    printWindow.document.write(printHtml);
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -730,7 +1013,6 @@ export default function Participants() {
         { key: 'participant.insurance.medicalInsuranceProvider', label: 'Medical insurance provider' },
         { key: 'participant.referralSource', label: 'Referral source', type: 'select' as const, options: referralSources },
         { key: 'participant.resourceOther', label: 'Other resource interest' },
-        { key: 'participant.consents.electronicSignature', label: 'Electronic signature' },
         { key: 'participant.consents.printedName', label: 'Printed name' },
         { key: 'participant.consents.signatureDate', label: 'Signature date', type: 'date' as const },
         { key: 'participant.checkedIn', label: 'Checked in', type: 'checkbox' as const }
