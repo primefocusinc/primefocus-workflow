@@ -1,5 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getCustomers, type CustomerRecord, type EventRecord, type StationStatus } from '../DataControl';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  getCustomers,
+  getDashboardEventOptions,
+  getDashboardStats,
+  type CustomerRecord,
+  type DashboardEventOption,
+  type DashboardStats,
+  type EventRecord,
+  type StationStatus
+} from '../DataControl';
 import { useAuth } from '../context/AuthContext';
 
 const archivo = { fontFamily: 'Archivo, sans-serif' };
@@ -37,86 +46,126 @@ interface CustomerEvent {
   event: EventRecord;
 }
 
+function createEmptyStats(): DashboardStats {
+  return {
+    registered: 0,
+    checkedIn: 0,
+    screened: 0,
+    passed: 0,
+    failed: 0,
+    examRouted: 0,
+    examCompleted: 0,
+    examInQueue: 0,
+    referralOut: 0,
+    rxFrameSelected: 0
+  };
+}
+
+function getCustomerEvents(customers: CustomerRecord[]): CustomerEvent[] {
+  return customers.flatMap(customer => (customer.Events ?? []).map(event => ({ customer, event })));
+}
+
+function getEventOptionsFromCustomers(customers: CustomerRecord[]): DashboardEventOption[] {
+  const byName = new Map<string, EventRecord>();
+
+  for (const { event } of getCustomerEvents(customers)) {
+    const existing = byName.get(event.eventName);
+    if (!existing || sortEventsByRecency(event, existing) < 0) {
+      byName.set(event.eventName, event);
+    }
+  }
+
+  return Array.from(byName.values()).sort(sortEventsByRecency).map(event => ({
+    eventName: event.eventName,
+    eventDate: event.eventDate,
+    createdAt: event.createdAt
+  }));
+}
+
+function getStatsFromCustomers(customers: CustomerRecord[], viewMode: 'this' | 'all', selectedEventName: string): DashboardStats {
+  const relevantEvents: EventRecord[] = [];
+
+  for (const customer of customers) {
+    const candidates = viewMode === 'all'
+      ? (customer.Events ?? [])
+      : (customer.Events ?? []).filter(event => event.eventName === selectedEventName);
+
+    const latest = [...candidates].sort(sortEventsByRecency)[0];
+    if (latest) {
+      relevantEvents.push(latest);
+    }
+  }
+
+  const registered = relevantEvents.length;
+  const checkedIn = relevantEvents.filter(event => findStation(event, 'check-in')?.status === 'complete').length;
+  const screened = relevantEvents.filter(event => findStation(event, 'vision-screening')?.status === 'complete').length;
+  const passed = relevantEvents.filter(event => findStation(event, 'vision-screening')?.decision === 'PASS').length;
+  const failed = relevantEvents.filter(event => findStation(event, 'vision-screening')?.decision === 'FAIL').length;
+  const examCompleted = relevantEvents.filter(event => findStation(event, 'eye-exam')?.status === 'complete').length;
+  const examInQueue = relevantEvents.filter(event => findStation(event, 'eye-exam')?.status === 'current').length;
+  const referralOut = relevantEvents.filter(event => findStation(event, 'eye-exam')?.decision === 'REFERRAL').length;
+  const rxFrameSelected = relevantEvents.filter(event =>
+    findStation(event, 'eye-exam')?.decision === 'FRAME' && findStation(event, 'frame-selection')?.status === 'complete'
+  ).length;
+
+  return { registered, checkedIn, screened, passed, failed, examRouted: failed, examCompleted, examInQueue, referralOut, rxFrameSelected };
+}
+
 export default function Dashboard() {
   const { user, role } = useAuth();
-  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'this' | 'all'>('this');
   const [selectedEventName, setSelectedEventName] = useState('');
+  const [eventOptions, setEventOptions] = useState<DashboardEventOption[]>([]);
+  const [stats, setStats] = useState<DashboardStats>(() => createEmptyStats());
+  const [refreshError, setRefreshError] = useState('');
   const [now, setNow] = useState(() => new Date());
 
-  useEffect(() => {
-    async function loadData() {
-      const data = await getCustomers();
-      setCustomers(data);
+  const loadDashboardData = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) {
+      setRefreshing(true);
+    }
+
+    try {
+      const options = await getDashboardEventOptions();
+      const nextSelectedEventName = viewMode === 'this'
+        ? selectedEventName || options[0]?.eventName || ''
+        : selectedEventName;
+      const nextStats = await getDashboardStats(viewMode, nextSelectedEventName);
+
+      setEventOptions(options);
+      setSelectedEventName(nextSelectedEventName);
+      setStats(nextStats);
+      setRefreshError('');
+      setNow(new Date());
+    } catch (error) {
+      console.warn('Unable to load aggregate dashboard stats; falling back to participant data.', error);
+      const customers = await getCustomers();
+      const fallbackOptions = getEventOptionsFromCustomers(customers);
+      const nextSelectedEventName = viewMode === 'this'
+        ? selectedEventName || fallbackOptions[0]?.eventName || ''
+        : selectedEventName;
+
+      setEventOptions(fallbackOptions);
+      setSelectedEventName(nextSelectedEventName);
+      setStats(getStatsFromCustomers(customers, viewMode, nextSelectedEventName));
+      setRefreshError('Dashboard is using fallback participant reads because aggregate counts could not be loaded.');
+      setNow(new Date());
+    } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-
-    loadData();
-  }, []);
+  }, [selectedEventName, viewMode]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(new Date()), 30000);
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => loadDashboardData(), 60000);
     return () => window.clearInterval(interval);
-  }, []);
-
-  const allCustomerEvents = useMemo<CustomerEvent[]>(() => {
-    return customers.flatMap(customer => (customer.Events ?? []).map(event => ({ customer, event })));
-  }, [customers]);
-
-  const eventOptions = useMemo(() => {
-    const byName = new Map<string, EventRecord>();
-
-    for (const { event } of allCustomerEvents) {
-      const existing = byName.get(event.eventName);
-      if (!existing || sortEventsByRecency(event, existing) < 0) {
-        byName.set(event.eventName, event);
-      }
-    }
-
-    return Array.from(byName.values()).sort(sortEventsByRecency);
-  }, [allCustomerEvents]);
-
-  useEffect(() => {
-    if (!selectedEventName && eventOptions.length > 0) {
-      setSelectedEventName(eventOptions[0].eventName);
-    }
-  }, [eventOptions, selectedEventName]);
-
-  const relevantEvents = useMemo(() => {
-    const events: EventRecord[] = [];
-
-    for (const customer of customers) {
-      const candidates = viewMode === 'all'
-        ? (customer.Events ?? [])
-        : (customer.Events ?? []).filter(event => event.eventName === selectedEventName);
-
-      const latest = [...candidates].sort(sortEventsByRecency)[0];
-      if (latest) {
-        events.push(latest);
-      }
-    }
-
-    return events;
-  }, [customers, viewMode, selectedEventName]);
-
-  const stats = useMemo(() => {
-    const registered = relevantEvents.length;
-    const checkedIn = relevantEvents.filter(event => findStation(event, 'check-in')?.status === 'complete').length;
-    const screened = relevantEvents.filter(event => findStation(event, 'vision-screening')?.status === 'complete').length;
-    const passed = relevantEvents.filter(event => findStation(event, 'vision-screening')?.decision === 'PASS').length;
-    const failed = relevantEvents.filter(event => findStation(event, 'vision-screening')?.decision === 'FAIL').length;
-
-    const examRouted = failed;
-    const examCompleted = relevantEvents.filter(event => findStation(event, 'eye-exam')?.status === 'complete').length;
-    const examInQueue = relevantEvents.filter(event => findStation(event, 'eye-exam')?.status === 'current').length;
-    const referralOut = relevantEvents.filter(event => findStation(event, 'eye-exam')?.decision === 'REFERRAL').length;
-    const rxFrameSelected = relevantEvents.filter(event =>
-      findStation(event, 'eye-exam')?.decision === 'FRAME' && findStation(event, 'frame-selection')?.status === 'complete'
-    ).length;
-
-    return { registered, checkedIn, screened, passed, failed, examRouted, examCompleted, examInQueue, referralOut, rxFrameSelected };
-  }, [relevantEvents]);
+  }, [loadDashboardData]);
 
   const updatedLabel = `${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}`;
 
@@ -145,13 +194,21 @@ export default function Dashboard() {
               </span>
               <span className="inline-flex items-center gap-2 rounded-full bg-[#d95a4a]/15 px-3 py-1 text-[13px] font-bold tracking-[.1em] text-[#e88a7a]">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-[#e06a58]" />
-                LIVE
+                AUTO 60S
               </span>
             </div>
             <div className="text-[15px] text-[#7d919c]">Updated {updatedLabel}</div>
+            {refreshError ? <div className="text-[13px] font-semibold text-[#e0b26d]">{refreshError}</div> : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => loadDashboardData(true)}
+              disabled={refreshing}
+              className="rounded-[10px] border border-[#2b3a46] bg-[#18232c] px-3.5 py-2 text-sm font-bold text-[#d5dce0] hover:bg-[#22303b] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
             <div className="flex rounded-[10px] bg-[#18232c] p-[3px]">
               <button
                 onClick={() => setViewMode('this')}
