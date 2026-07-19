@@ -626,3 +626,12 @@ export async function createRegistrationEvent(eventName: string, eventDate: stri
   await setDoc(doc(db, 'registrationEvents', id), normalized);
   return normalized;
 }
+
+export async function deleteRegistrationEvent(eventId: string): Promise<void> {
+  const normalizedId = eventId.trim();
+  if (!normalizedId) {
+    return;
+  }
+
+  await deleteDoc(doc(db, 'registrationEvents', normalizedId));
+}

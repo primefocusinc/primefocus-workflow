@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import RegistrationEventCreator from '../components/RegistrationEventCreator'
-import { createRegistrationEvent, getRegistrationEvents, type RegistrationEventOption } from '../DataControl'
+import { createRegistrationEvent, deleteRegistrationEvent, getRegistrationEvents, type RegistrationEventOption } from '../DataControl'
 import { useAuth } from '../context/AuthContext'
 
 const archivo = { fontFamily: 'Archivo, sans-serif' }
@@ -27,6 +27,7 @@ export default function AdminEvents() {
   const { user, role } = useAuth()
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingEventIds, setDeletingEventIds] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     async function loadData() {
@@ -45,6 +46,21 @@ export default function AdminEvents() {
 
   const handleCreateRegistrationEvent = async ({ eventName, eventDate }: { eventName: string; eventDate: string }) => {
     await createRegistrationEvent(eventName, eventDate)
+  }
+
+  const handleDeleteRegistrationEvent = async (eventId: string, eventName: string) => {
+    const confirmed = window.confirm(`Delete registration event "${eventName || eventId}"?`)
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingEventIds((current) => ({ ...current, [eventId]: true }))
+    try {
+      await deleteRegistrationEvent(eventId)
+      setRegistrationEvents((current) => current.filter((event) => event.id !== eventId))
+    } finally {
+      setDeletingEventIds((current) => ({ ...current, [eventId]: false }))
+    }
   }
 
   if (!user) {
@@ -108,12 +124,13 @@ export default function AdminEvents() {
                     <th className="px-4 py-3 font-semibold">Event id</th>
                     <th className="px-4 py-3 font-semibold">Date</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {registrationEvents.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-[#7d919c]" colSpan={4}>
+                      <td className="px-4 py-6 text-[#7d919c]" colSpan={5}>
                         No registration events found.
                       </td>
                     </tr>
@@ -124,6 +141,16 @@ export default function AdminEvents() {
                         <td className="px-4 py-3 font-mono text-xs text-[#d5dce0]">{event.id}</td>
                         <td className="px-4 py-3 text-[#d5dce0]">{event.eventDate || 'No date'}</td>
                         <td className="px-4 py-3 text-[#d5dce0]">{event.status}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteRegistrationEvent(event.id, event.eventName)}
+                            disabled={Boolean(deletingEventIds[event.id])}
+                            className="rounded border border-red-300 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingEventIds[event.id] ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}

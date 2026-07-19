@@ -229,39 +229,37 @@ export default function Participants() {
   );
 
   const participantEventFilterOptions = useMemo(() => {
-    const options = [{ id: 'all', label: 'All events', eventName: '' }];
-    const seenEventNames = new Set<string>();
+    const options = [{ id: 'all', label: 'All events' }];
+    const seenEventIds = new Set<string>();
 
     registrationEvents.forEach(event => {
-      if (!event.eventName || seenEventNames.has(event.eventName)) {
+      if (!event.id || seenEventIds.has(event.id)) {
         return;
       }
 
-      seenEventNames.add(event.eventName);
-      options.push({ id: event.id, label: event.eventName, eventName: event.eventName });
+      seenEventIds.add(event.id);
+      options.push({
+        id: event.id,
+        label: event.eventDate ? `${event.eventName || 'Untitled event'} (${event.eventDate})` : (event.eventName || 'Untitled event')
+      });
     });
 
     customers.forEach(customer => {
       (customer.Events ?? []).forEach(event => {
-        if (!event.eventName || seenEventNames.has(event.eventName)) {
+        if (!event.id || seenEventIds.has(event.id)) {
           return;
         }
 
-        seenEventNames.add(event.eventName);
-        options.push({ id: `event-name:${event.eventName}`, label: event.eventName, eventName: event.eventName });
+        seenEventIds.add(event.id);
+        options.push({
+          id: event.id,
+          label: event.eventDate ? `${event.eventName || 'Untitled event'} (${event.eventDate})` : (event.eventName || 'Untitled event')
+        });
       });
     });
 
     return options;
   }, [registrationEvents, customers]);
-
-  const selectedParticipantEventFilterName = useMemo(() => {
-    if (participantEventFilterId === 'all') {
-      return '';
-    }
-
-    return participantEventFilterOptions.find(option => option.id === participantEventFilterId)?.eventName ?? '';
-  }, [participantEventFilterId, participantEventFilterOptions]);
 
   const filteredCustomers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -270,11 +268,11 @@ export default function Participants() {
       const fullName = `${customer['First Name'] ?? ''} ${customer['Last Name'] ?? ''}`.trim().toLowerCase();
       const email = (customer.Email ?? '').toLowerCase();
       const matchesSearch = !normalizedSearch || fullName.includes(normalizedSearch) || email.includes(normalizedSearch);
-      const matchesEvent = !selectedParticipantEventFilterName || (customer.Events ?? []).some(event => event.eventName === selectedParticipantEventFilterName);
+      const matchesEvent = participantEventFilterId === 'all' || (customer.Events ?? []).some(event => event.id === participantEventFilterId);
 
       return matchesSearch && matchesEvent;
     });
-  }, [customers, searchTerm, selectedParticipantEventFilterName]);
+  }, [customers, searchTerm, participantEventFilterId]);
 
   useEffect(() => {
     if (participantEventFilterId === 'all') {
@@ -1284,7 +1282,7 @@ export default function Participants() {
                 <button
                   key={customerId || email}
                   onClick={() => handleSelect(customer)}
-                  className={`w-full text-left rounded-md border px-3 py-2 ${selectedCustomer?.id === customer.id ? 'bg-blue-50 border-blue-400' : 'bg-white hover:bg-gray-50'}`}
+                  className={`w-full text-left rounded-md border px-3 py-2 ${(customer.id && customer.id === selectedCustomerId) ? 'bg-blue-50 border-blue-400' : 'bg-white hover:bg-gray-50'}`}
                 >
                   <div className="font-medium">{fullName || 'Unnamed participant'}</div>
                   <div className="text-sm text-gray-500">{email}</div>
