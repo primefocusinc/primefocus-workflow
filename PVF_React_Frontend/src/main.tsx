@@ -53,7 +53,7 @@ function Nav() {
 
   return (
     <nav className="border-b bg-white">
-      <div className="max-w-5xl mx-auto px-6 py-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center gap-x-6 gap-y-2">
         <Link to="/" className="font-bold text-blue-800 text-lg">Prime Focus Inc.</Link>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-gray-700">
           {visibleLinks.map((l) => (

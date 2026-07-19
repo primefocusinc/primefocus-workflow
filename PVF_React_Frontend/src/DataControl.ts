@@ -83,7 +83,6 @@ export interface ParticipantConsents {
   photoVideoRelease: boolean;
   communicationAuthorization: boolean;
   acknowledgement: boolean;
-  electronicSignature: string;
   printedName: string;
   signatureDate: string;
 }
@@ -217,7 +216,6 @@ function normalizeParticipant(customer: CustomerRecord): ParticipantProfile {
       photoVideoRelease: existing?.consents?.photoVideoRelease ?? false,
       communicationAuthorization: existing?.consents?.communicationAuthorization ?? false,
       acknowledgement: existing?.consents?.acknowledgement ?? false,
-      electronicSignature: existing?.consents?.electronicSignature ?? '',
       printedName: existing?.consents?.printedName ?? '',
       signatureDate: existing?.consents?.signatureDate ?? ''
     },
@@ -289,7 +287,6 @@ export function createDefaultParticipantProfile(): ParticipantProfile {
       photoVideoRelease: false,
       communicationAuthorization: false,
       acknowledgement: false,
-      electronicSignature: '',
       printedName: '',
       signatureDate: ''
     },
