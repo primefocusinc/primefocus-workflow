@@ -28,6 +28,7 @@ export default function AdminEvents() {
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingEventIds, setDeletingEventIds] = useState<Record<string, boolean>>({})
+  const [copiedEventId, setCopiedEventId] = useState('')
 
   useEffect(() => {
     async function loadData() {
@@ -61,6 +62,17 @@ export default function AdminEvents() {
     } finally {
       setDeletingEventIds((current) => ({ ...current, [eventId]: false }))
     }
+  }
+
+  const buildRegistrationUrl = (eventId: string) => `https://primefocus-workflow.web.app/#/register?eventId=${encodeURIComponent(eventId)}`
+
+  const handleCopyRegistrationUrl = async (eventId: string) => {
+    const registrationUrl = buildRegistrationUrl(eventId)
+    await navigator.clipboard.writeText(registrationUrl)
+    setCopiedEventId(eventId)
+    window.setTimeout(() => {
+      setCopiedEventId((current) => (current === eventId ? '' : current))
+    }, 1500)
   }
 
   if (!user) {
@@ -122,6 +134,7 @@ export default function AdminEvents() {
                   <tr>
                     <th className="px-4 py-3 font-semibold">Event name</th>
                     <th className="px-4 py-3 font-semibold">Event id</th>
+                    <th className="px-4 py-3 font-semibold">Registration URL</th>
                     <th className="px-4 py-3 font-semibold">Date</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Actions</th>
@@ -130,7 +143,7 @@ export default function AdminEvents() {
                 <tbody>
                   {registrationEvents.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-6 text-[#7d919c]" colSpan={5}>
+                      <td className="px-4 py-6 text-[#7d919c]" colSpan={6}>
                         No registration events found.
                       </td>
                     </tr>
@@ -139,6 +152,18 @@ export default function AdminEvents() {
                       <tr key={event.id} className="border-t border-[#22303b] text-[#f2f5f3]">
                         <td className="px-4 py-3 font-semibold text-[#6fb3c0]">{event.eventName || 'Untitled event'}</td>
                         <td className="px-4 py-3 font-mono text-xs text-[#d5dce0]">{event.id}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="max-w-[320px] truncate text-xs text-[#d5dce0]">{buildRegistrationUrl(event.id)}</span>
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyRegistrationUrl(event.id)}
+                              className="rounded border border-[#3d8b99] px-2 py-1 text-xs font-bold text-[#6fb3c0] hover:bg-[#3d8b99]/20"
+                            >
+                              {copiedEventId === event.id ? 'Copied' : 'Copy URL'}
+                            </button>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-[#d5dce0]">{event.eventDate || 'No date'}</td>
                         <td className="px-4 py-3 text-[#d5dce0]">{event.status}</td>
                         <td className="px-4 py-3">
