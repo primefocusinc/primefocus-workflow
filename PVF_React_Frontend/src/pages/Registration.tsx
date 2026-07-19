@@ -7,6 +7,7 @@ import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import { saveRegistrationCustomer, createRegistrationEvent, getRegistrationEvents, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationStatus } from '../DataControl'
 import { useAuth } from '../context/AuthContext'
+import RegistrationEventCreator from '../components/RegistrationEventCreator'
 
 type RegistrationForm = {
   event: string
@@ -403,10 +404,6 @@ export default function Registration() {
   const [saveError, setSaveError] = useState('')
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
   const [eventsLoading, setEventsLoading] = useState(true)
-  const [eventCreationName, setEventCreationName] = useState('')
-  const [eventCreationDate, setEventCreationDate] = useState(new Date().toISOString().slice(0, 10))
-  const [eventCreationSaving, setEventCreationSaving] = useState(false)
-  const [eventCreationError, setEventCreationError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -577,33 +574,14 @@ export default function Registration() {
     }
   }
 
-  const handleCreateRegistrationEvent = async () => {
-    if (role !== 'admin') {
-      return
-    }
+  const handleCreateRegistrationEvent = async ({ eventName, eventDate }: { eventName: string; eventDate: string }) => {
+    const createdEvent = await createRegistrationEvent(eventName, eventDate)
+    setForm(current => ({ ...current, event: createdEvent.id }))
+  }
 
-    const trimmedName = eventCreationName.trim()
-    if (!trimmedName) {
-      setEventCreationError('Event name is required.')
-      return
-    }
-
-    setEventCreationSaving(true)
-    setEventCreationError('')
-
-    try {
-      const createdEvent = await createRegistrationEvent(trimmedName, eventCreationDate)
-      const refreshedEvents = await getRegistrationEvents()
-      setRegistrationEvents(refreshedEvents)
-      setForm(current => ({ ...current, event: createdEvent.id }))
-      setEventCreationName('')
-      setEventCreationDate(new Date().toISOString().slice(0, 10))
-    } catch (error) {
-      console.error('Failed to create registration event', error)
-      setEventCreationError('Unable to create this event right now.')
-    } finally {
-      setEventCreationSaving(false)
-    }
+  const refreshRegistrationEvents = async () => {
+    const refreshedEvents = await getRegistrationEvents()
+    setRegistrationEvents(refreshedEvents)
   }
 
   const inputClass = 'mt-1 w-full rounded border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100'
@@ -694,40 +672,14 @@ export default function Registration() {
             </label>
 
             {role === 'admin' ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 md:col-span-2">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-amber-800">Admin only</p>
-                  <h3 className="mt-1 text-lg font-bold text-amber-900">Create a new registration event</h3>
-                </div>
-                <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_auto]">
-                  <label>
-                    <FieldLabel >Event name</FieldLabel>
-                    <input
-                      value={eventCreationName}
-                      onChange={(changeEvent) => setEventCreationName(changeEvent.target.value)}
-                      className={inputClass}
-                      placeholder="Back to School Vision 2026"
-                      
-                    />
-                  </label>
-                  <label>
-                    <FieldLabel >Event date</FieldLabel>
-                    <input
-                      type="date"
-                      value={eventCreationDate}
-                      onChange={(changeEvent) => setEventCreationDate(changeEvent.target.value)}
-                      className={inputClass}
-                      
-                    />
-                  </label>
-                  <div className="flex items-end">
-                    <Button type="button" variant="contained" onClick={() => void handleCreateRegistrationEvent()} disabled={eventCreationSaving || !eventCreationName || !eventCreationDate}>
-                      {eventCreationSaving ? 'Creating...' : 'Create event'}
-                    </Button>
-                  </div>
-                </div>
-                {eventCreationError ? <p className="mt-3 text-sm font-medium text-red-700">{eventCreationError}</p> : null}
-              </div>
+              <RegistrationEventCreator
+                className="md:col-span-2"
+                title="Create a new registration event"
+                description="Create an event once here and use it everywhere else in the app."
+                buttonLabel="Create event"
+                onCreate={handleCreateRegistrationEvent}
+                onCreated={refreshRegistrationEvents}
+              />
             ) : null}
 
             <label>
