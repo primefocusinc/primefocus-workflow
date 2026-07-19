@@ -5,7 +5,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { Link, useNavigate, useParams } from 'react-router';
-import { createDefaultParticipantProfile, deleteCustomerByEmail, deleteEventFromFirebase, getCustomers, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type StationDecision, type StationStatus } from '../DataControl';
+import { createDefaultParticipantProfile, deleteCustomerByEmail, deleteEventFromFirebase, getCustomers, getRegistrationEvents, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationDecision, type StationStatus } from '../DataControl';
 import { useAuth } from '../context/AuthContext';
 
 const stationTemplates = [
@@ -51,7 +51,7 @@ function buildStationStatuses(): StationStatus[] {
   }));
 }
 
-function buildNewEvent(participantId: string, participantEmail: string, eventName: string): EventRecord {
+function buildNewEvent(participantId: string, participantEmail: string, eventName: string, eventDate?: string): EventRecord {
   const today = new Date().toISOString().slice(0, 10);
 
   return {
@@ -59,7 +59,7 @@ function buildNewEvent(participantId: string, participantEmail: string, eventNam
     participantId,
     participantEmail,
     eventName: eventName.trim() || 'Community Vision Event',
-    eventDate: today,
+    eventDate: eventDate?.trim() || today,
     createdAt: new Date().toISOString(),
     status: 'active',
     stationStatuses: buildStationStatuses()
@@ -128,9 +128,9 @@ export default function Participants() {
   const [participantProfile, setParticipantProfile] = useState<ParticipantProfile>(createDefaultParticipantProfile());
   const [expanded, setExpanded] = useState<string>('section-1');
   const [searchTerm, setSearchTerm] = useState('');
-  const [eventNameDraft, setEventNameDraft] = useState('Back to School Vision - 2026');
-  const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
-  const [addEventScope, setAddEventScope] = useState<'single' | 'all'>('single');
+  const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([]);
+  const [registrationEventsLoading, setRegistrationEventsLoading] = useState(true);
+  const [selectedRegistrationEventId, setSelectedRegistrationEventId] = useState('');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const navigate = useNavigate();
   const params = useParams();
@@ -158,6 +158,35 @@ export default function Participants() {
     loadData();
   }, [params.email]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRegistrationEvents() {
+      setRegistrationEventsLoading(true);
+      const events = await getRegistrationEvents();
+
+      if (cancelled) {
+        return;
+      }
+
+      setRegistrationEvents(events);
+      setRegistrationEventsLoading(false);
+      setSelectedRegistrationEventId(current => {
+        if (current && events.some(event => event.id === current)) {
+          return current;
+        }
+
+        return events[0]?.id ?? '';
+      });
+    }
+
+    loadRegistrationEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedCustomer = useMemo(() => {
     return customers.find(customer => customer.Email?.toLowerCase() === selectedEmail.toLowerCase()) ?? customers[0];
   }, [customers, selectedEmail]);
@@ -165,6 +194,10 @@ export default function Participants() {
   const participantEvents = useMemo(() => selectedCustomer?.Events ?? [], [selectedCustomer]);
   const sortedParticipantEvents = useMemo(() => [...participantEvents].sort(sortEventsByRecency), [participantEvents]);
   const participant = useMemo(() => selectedCustomer?.participant ?? createDefaultParticipantProfile(), [selectedCustomer]);
+  const selectedRegistrationEvent = useMemo(
+    () => registrationEvents.find(event => event.id === selectedRegistrationEventId) ?? null,
+    [registrationEvents, selectedRegistrationEventId]
+  );
 
   const filteredCustomers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -311,12 +344,12 @@ export default function Participants() {
   };
 
   const handleAddEvent = async () => {
-    if (!selectedCustomer?.Email) {
+    if (!selectedCustomer?.Email || !selectedRegistrationEvent) {
       return;
     }
 
     const participantId = selectedCustomer.participant?.id ?? selectedCustomer.id ?? selectedCustomer.Email;
-    const newEvent = buildNewEvent(participantId, selectedCustomer.Email, eventNameDraft);
+    const newEvent = buildNewEvent(participantId, selectedCustomer.Email, selectedRegistrationEvent.eventName, selectedRegistrationEvent.eventDate);
     setExpandedEventId(newEvent.id);
     const nextCustomers = customers.map(customer => {
       if (customer.Email?.toLowerCase() !== selectedCustomer.Email?.toLowerCase()) {
@@ -337,24 +370,13 @@ export default function Participants() {
     }
   };
 
-  const openAddEventModal = (scope: 'single' | 'all') => {
-    setAddEventScope(scope);
-    setIsAddEventModalOpen(true);
-  };
-
-  const confirmAddEvent = () => {
-    if (addEventScope === 'all') {
-      handleAddEventToAll();
-    } else {
-      handleAddEvent();
+  const handleAddEventToAll = async () => {
+    if (!selectedRegistrationEvent || !selectedCustomer?.Email) {
+      return;
     }
 
-    setIsAddEventModalOpen(false);
-  };
-
-  const handleAddEventToAll = async () => {
     const selectedParticipantId = selectedCustomer?.participant?.id ?? selectedCustomer?.id ?? selectedCustomer?.Email ?? '';
-    const selectedCustomerEvent = buildNewEvent(selectedParticipantId, selectedCustomer?.Email ?? '', eventNameDraft);
+    const selectedCustomerEvent = buildNewEvent(selectedParticipantId, selectedCustomer.Email, selectedRegistrationEvent.eventName, selectedRegistrationEvent.eventDate);
     setExpandedEventId(selectedCustomerEvent.id);
     const nextCustomers = customers.map(customer => {
       if (!customer.Email) {
@@ -364,7 +386,9 @@ export default function Participants() {
       const participantId = customer.participant?.id ?? customer.id ?? customer.Email;
       const newEvent = customer.Email.toLowerCase() === selectedCustomer?.Email?.toLowerCase()
         ? selectedCustomerEvent
-        : buildNewEvent(participantId, customer.Email, eventNameDraft);
+        : (() => {
+          return buildNewEvent(participantId, customer.Email, selectedRegistrationEvent.eventName, selectedRegistrationEvent.eventDate);
+        })();
 
       return {
         ...customer,
@@ -798,6 +822,11 @@ export default function Participants() {
       font-weight: 600;
     }
 
+    .note-blank {
+      min-height: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
     .result-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -861,6 +890,9 @@ export default function Participants() {
     <div class="notes">
       <div class="note-line"><span class="note-label">Screening Decision</span><span>${display(stationTwo.decision)}</span></div>
       <div class="note-line"><span class="note-label">Exam Outcome</span><span>${display(eyeExam?.decision ?? '')}</span></div>
+      <div class="note-blank"></div>
+      <div class="note-blank"></div>
+      <div class="note-blank"></div>
     </div>
 
     <h2>Screening and Exam Results</h2>
@@ -1291,62 +1323,53 @@ export default function Participants() {
 
                   <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                           <h3 className="text-lg font-semibold text-blue-800">Event tracking</h3>
-                          <p className="text-sm text-gray-600">Create events and move each participant through the station flow from check-in to the vision success station.</p>
+                          <p className="text-sm text-gray-600">Choose a shared event from registration and add it to one participant or everyone.</p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => openAddEventModal('all')}
-                            className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white"
-                          >
-                            Add event for everyone
-                          </button>
-                          <button
-                            onClick={() => openAddEventModal('single')}
-                            className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white"
-                          >
-                            Add event
-                          </button>
+                        <div className="grid gap-3 sm:min-w-[360px]">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Shared event
+                            <select
+                              value={selectedRegistrationEventId}
+                              onChange={(event) => setSelectedRegistrationEventId(event.target.value)}
+                              className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+                              disabled={registrationEventsLoading}
+                            >
+                              {registrationEventsLoading ? (
+                                <option value="">Loading events...</option>
+                              ) : registrationEvents.length === 0 ? (
+                                <option value="">No registration events available</option>
+                              ) : (
+                                registrationEvents.map(event => (
+                                  <option key={event.id} value={event.id}>
+                                    {event.eventName} — {event.eventDate}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </label>
+                          <div className="flex flex-wrap gap-2 sm:justify-end">
+                            <button
+                              onClick={handleAddEventToAll}
+                              disabled={!selectedRegistrationEvent}
+                              className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-blue-300"
+                            >
+                              Add to everyone
+                            </button>
+                            <button
+                              onClick={handleAddEvent}
+                              disabled={!selectedRegistrationEvent}
+                              className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-blue-300"
+                            >
+                              Add to selected participant
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {isAddEventModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-                      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-5 shadow-xl">
-                        <h4 className="text-lg font-semibold text-blue-800">Add event</h4>
-                        <p className="mt-1 text-sm text-gray-600">
-                          {addEventScope === 'all' ? 'Create a new event for every participant in the list.' : 'Create a new event for the currently selected participant.'}
-                        </p>
-                        <label className="mt-4 block text-sm font-medium text-gray-700">
-                          Event name
-                          <input
-                            value={eventNameDraft}
-                            onChange={(event) => setEventNameDraft(event.target.value)}
-                            className="mt-1 w-full rounded border px-3 py-2"
-                            placeholder="Community Vision Event"
-                          />
-                        </label>
-                        <div className="mt-5 flex justify-end gap-2">
-                          <button
-                            onClick={() => setIsAddEventModalOpen(false)}
-                            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={confirmAddEvent}
-                            className="rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white"
-                          >
-                            Create event
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {sortedParticipantEvents.length === 0 ? (
                     <div className="rounded border border-dashed border-gray-300 p-4 text-sm text-gray-600">
