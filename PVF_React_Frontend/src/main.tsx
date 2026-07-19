@@ -11,6 +11,7 @@ import Register from './pages/Register.tsx'
 import LogIn from './pages/LogIn.tsx'
 import Participants from './pages/Participants.tsx'
 import AdminUsers from './pages/AdminUsers.tsx'
+import AdminEvents from './pages/AdminEvents.tsx'
 import Dashboard from './pages/Dashboard.tsx'
 import { AuthProvider, useAuth } from './context/AuthContext.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
@@ -34,7 +35,12 @@ function Nav() {
     visibleLinks.push({ to: '/dashboard', label: 'Dashboard' })
   }
 
-  const adminLinks = role === 'admin' ? [{ to: '/admin-users', label: 'Admin Users' }] : []
+  const adminLinks = role === 'admin'
+    ? [
+      { to: '/admin-events', label: 'Admin Events' },
+      { to: '/admin-users', label: 'Admin Users' },
+    ]
+    : []
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -111,6 +117,7 @@ function AppRoutes() {
         <Route path="/participants" element={<Participants />} />
         <Route path="/participants/:email" element={<Participants />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/admin-events" element={<AdminEvents />} />
         <Route path="/admin-users" element={<AdminUsers />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />

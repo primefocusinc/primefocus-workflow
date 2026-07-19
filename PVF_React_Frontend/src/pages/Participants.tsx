@@ -4,7 +4,7 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { createDefaultParticipantProfile, deleteCustomerByEmail, deleteEventFromFirebase, getCustomers, getRegistrationEvents, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationDecision, type StationStatus } from '../DataControl';
 import { useAuth } from '../context/AuthContext';
 
@@ -134,6 +134,7 @@ export default function Participants() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const navigate = useNavigate();
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const { user, role } = useAuth();
 
   useEffect(() => {
@@ -142,12 +143,28 @@ export default function Participants() {
       setCustomers(data);
       await saveCustomers(data);
       const emailParam = params.email?.toLowerCase();
+      const eventIdParam = searchParams.get('eventId')?.trim() ?? '';
+      const customerWithEvent = eventIdParam
+        ? data.find(customer => customer.Events?.some(event => event.id === eventIdParam))
+        : undefined;
+
       if (emailParam) {
         const match = data.find(customer => customer.Email?.toLowerCase() === emailParam);
         if (match) {
           setSelectedEmail(match.Email ?? '');
           setFormData(match);
+          if (eventIdParam && match.Events?.some(event => event.id === eventIdParam)) {
+            setExpandedEventId(eventIdParam);
+          }
+        } else if (customerWithEvent) {
+          setSelectedEmail(customerWithEvent.Email ?? '');
+          setFormData(customerWithEvent);
+          setExpandedEventId(eventIdParam);
         }
+      } else if (customerWithEvent) {
+        setSelectedEmail(customerWithEvent.Email ?? '');
+        setFormData(customerWithEvent);
+        setExpandedEventId(eventIdParam);
       } else if (data[0]) {
         setSelectedEmail(data[0].Email ?? '');
         setFormData(data[0]);
@@ -156,7 +173,7 @@ export default function Participants() {
     }
 
     loadData();
-  }, [params.email]);
+  }, [params.email, searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,6 +244,15 @@ export default function Participants() {
       return;
     }
 
+    const eventIdParam = searchParams.get('eventId')?.trim() ?? '';
+    if (eventIdParam) {
+      const matchingEvent = participantEvents.find(event => event.id === eventIdParam);
+      if (matchingEvent) {
+        setExpandedEventId(matchingEvent.id);
+        return;
+      }
+    }
+
     const latestEvent = sortedParticipantEvents[0];
 
     setExpandedEventId(current => {
@@ -236,7 +262,7 @@ export default function Participants() {
 
       return latestEvent?.id ?? null;
     });
-  }, [participantEvents, sortedParticipantEvents]);
+  }, [participantEvents, sortedParticipantEvents, searchParams]);
 
   const handleSelect = (customer: CustomerRecord) => {
     const email = customer.Email ?? '';
