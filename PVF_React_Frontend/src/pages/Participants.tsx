@@ -922,8 +922,10 @@ export default function Participants() {
     }
 
     .note-blank {
-      min-height: 14px;
-      border-bottom: 1px solid var(--line);
+      display: block;
+      min-height: 20px;
+      border-bottom: 2px solid #6b7280;
+      margin-top: 6px;
     }
 
     .result-grid {
@@ -989,9 +991,10 @@ export default function Participants() {
     <div class="notes">
       <div class="note-line"><span class="note-label">Screening Decision</span><span>${display(stationTwo.decision)}</span></div>
       <div class="note-line"><span class="note-label">Exam Outcome</span><span>${display(eyeExam?.decision ?? '')}</span></div>
-      <div class="note-blank"></div>
-      <div class="note-blank"></div>
-      <div class="note-blank"></div>
+      <div class="note-blank">&nbsp;</div>
+      <div class="note-blank">&nbsp;</div>
+      <div class="note-blank">&nbsp;</div>
+      <div class="note-blank">&nbsp;</div>
     </div>
 
     <h2>Screening and Exam Results</h2>
