@@ -5,6 +5,10 @@ import Button from '@mui/material/Button'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import { useSearchParams } from 'react-router'
 import { saveRegistrationCustomer, createRegistrationEvent, getRegistrationEvents, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationStatus } from '../DataControl'
 import { useAuth } from '../context/AuthContext'
@@ -175,14 +179,17 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const normalizeText = (value: string) => value.trim()
 
-const createParticipantId = (form: RegistrationForm, preparedAt: string) => {
+const createParticipantId = (form: RegistrationForm) => {
   const readableName = `${form.firstName}-${form.lastName}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-  const timestamp = preparedAt.replace(/[^0-9]/g, '').slice(0, 14)
+  const timestamp = Date.now().toString(36)
+  const uuidSegment = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().split('-')[0]
+    : Math.random().toString(36).slice(2, 10)
 
-  return `participant-${readableName || 'registration'}-${timestamp}`
+  return `participant-${readableName || 'registration'}-${timestamp}-${uuidSegment}`
 }
 
 const createRegistrationSubmissionPayload = (form: RegistrationForm, requestedEventName: string): RegistrationSubmissionPayload => {
@@ -193,7 +200,7 @@ const createRegistrationSubmissionPayload = (form: RegistrationForm, requestedEv
 
   return {
     participant: {
-      id: createParticipantId(form, preparedAt),
+      id: createParticipantId(form),
       participantType: form.participantType,
       firstName: normalizeText(form.firstName),
       lastName: normalizeText(form.lastName),
@@ -400,8 +407,8 @@ export default function Registration() {
   const { role } = useAuth()
   const [searchParams] = useSearchParams()
   const [form, setForm] = useState<RegistrationForm>(() => createInitialForm())
-  const [submitted, setSubmitted] = useState(false)
-  const [submissionPayload, setSubmissionPayload] = useState<RegistrationSubmissionPayload | null>(null)
+  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [createdUserEmail, setCreatedUserEmail] = useState('')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveError, setSaveError] = useState('')
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
@@ -518,8 +525,7 @@ export default function Registration() {
 
   const updateField = (field: keyof RegistrationForm, value: string | boolean | string[]) => {
     setForm((current) => ({ ...current, [field]: value }))
-    setSubmitted(false)
-    setSubmissionPayload(null)
+    setSuccessModalOpen(false)
     setSaveStatus('idle')
     setSaveError('')
   }
@@ -547,16 +553,14 @@ export default function Registration() {
 
       return { ...current, [field]: nextValues }
     })
-    setSubmitted(false)
-    setSubmissionPayload(null)
+    setSuccessModalOpen(false)
     setSaveStatus('idle')
     setSaveError('')
   }
 
   const handleReset = () => {
     setForm(createInitialForm())
-    setSubmitted(false)
-    setSubmissionPayload(null)
+    setSuccessModalOpen(false)
     setSaveStatus('idle')
     setSaveError('')
   }
@@ -567,13 +571,13 @@ export default function Registration() {
 
     const selectedEvent = availableRegistrationEvents.find(event => event.id === form.event)
     const payload = createRegistrationSubmissionPayload(form, selectedEvent?.eventName || defaultEventName)
-    setSubmissionPayload(payload)
     setSaveStatus('saving')
     setSaveError('')
 
     try {
       await saveRegistrationCustomer(createCustomerRecordFromPayload(payload))
-      setSubmitted(true)
+      setCreatedUserEmail(payload.participant.contact.email)
+      setSuccessModalOpen(true)
       setSaveStatus('saved')
     } catch (error) {
       console.error('Failed to save registration', error)
@@ -1075,24 +1079,17 @@ export default function Registration() {
           </div>
         </form>
 
-        {submitted ? (
-          <section className="mt-6 rounded-lg border border-green-200 bg-green-50 p-5">
-            <h2 className="text-xl font-bold text-green-900">Registration saved</h2>
-            <p className="mt-2 text-green-900">
-              {submissionPayload?.participant.firstName} {submissionPayload?.participant.lastName} has been saved for {submissionPayload?.requestedEventName || defaultEventName}.
+        <Dialog open={successModalOpen} onClose={() => setSuccessModalOpen(false)} aria-labelledby="registration-success-title">
+          <DialogTitle id="registration-success-title">User created</DialogTitle>
+          <DialogContent>
+            <p className="text-sm text-gray-700">
+              User with email {createdUserEmail || form.guardianEmail.trim().toLowerCase()} was created.
             </p>
-            {submissionPayload ? (
-              <details className="mt-4 rounded border border-green-200 bg-white p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-green-900">
-                  View prepared registration payload
-                </summary>
-                <pre className="mt-3 max-h-96 overflow-auto rounded bg-gray-950 p-4 text-xs text-gray-50">
-                  {JSON.stringify(submissionPayload, null, 2)}
-                </pre>
-              </details>
-            ) : null}
-          </section>
-        ) : null}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSuccessModalOpen(false)} variant="contained">OK</Button>
+          </DialogActions>
+        </Dialog>
       </div>
     </main>
   )
