@@ -632,6 +632,38 @@ export async function getCustomersFromFirebase(): Promise<CustomerRecord[]> {
   return getCustomers();
 }
 
+export async function getAllEvents(): Promise<EventRecord[]> {
+  const customers = await getCustomers();
+  const byId = new Map<string, EventRecord>();
+
+  for (const customer of customers) {
+    for (const event of customer.Events ?? []) {
+      if (!byId.has(event.id)) {
+        byId.set(event.id, normalizeEventRecord(event));
+      }
+    }
+  }
+
+  return Array.from(byId.values()).sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
+    const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
+
+    if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+      return 0;
+    }
+
+    if (Number.isNaN(leftTime)) {
+      return 1;
+    }
+
+    if (Number.isNaN(rightTime)) {
+      return -1;
+    }
+
+    return rightTime - leftTime;
+  });
+}
+
 export async function getRegistrationEvents(): Promise<RegistrationEventOption[]> {
   try {
     const snapshot = await getDocs(collection(db, 'registrationEvents'));
