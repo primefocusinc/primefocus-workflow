@@ -110,11 +110,11 @@ function AppRoutes() {
       <Route path="/login" element={<LogIn />} />
       <Route path="/signup" element={<Register />} />
       <Route path="/register" element={<Registration />} />
+      <Route path="/vision-check" element={<VisionCheck />} />
+      <Route path="/vision-check/child" element={<VisionCheck initialType="child" />} />
+      <Route path="/vision-check/adult" element={<VisionCheck initialType="adult" />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Home />} />
-        <Route path="/vision-check" element={<VisionCheck />} />
-        <Route path="/vision-check/child" element={<VisionCheck initialType="child" />} />
-        <Route path="/vision-check/adult" element={<VisionCheck initialType="adult" />} />
         <Route path="/participants" element={<Participants />} />
         <Route path="/participants/:email" element={<Participants />} />
         <Route path="/dashboard" element={<Dashboard />} />
