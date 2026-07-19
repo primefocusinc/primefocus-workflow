@@ -49,11 +49,15 @@ service cloud.firestore {
       // Anyone (authenticated or anonymous) can create a participant record during registration.
       allow create: if true;
 
+      // Public registration uses setDoc(..., { merge: true }) keyed by email.
+      // Returning participants therefore perform updates, not just creates.
+      allow update: if true;
+
       // Only admins and doctors can read participant records.
       allow read: if isAdminOrDoctor();
 
-      // Only admins and doctors can update or delete participant records.
-      allow update, delete: if isAdminOrDoctor();
+      // Only admins and doctors can delete participant records.
+      allow delete: if isAdminOrDoctor();
     }
 
     match /events/{eventId} {
