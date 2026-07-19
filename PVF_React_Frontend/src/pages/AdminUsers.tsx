@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { collection, doc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import { db, DEFAULT_ROLE, type UserRole } from '../firebase'
@@ -14,6 +14,21 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    if (!normalizedSearch) {
+      return users
+    }
+
+    return users.filter((item) => (
+      item.email.toLowerCase().includes(normalizedSearch)
+      || item.uid.toLowerCase().includes(normalizedSearch)
+      || item.role.toLowerCase().includes(normalizedSearch)
+    ))
+  }, [users, searchTerm])
 
   useEffect(() => {
     async function loadUsers() {
@@ -67,16 +82,30 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="mx-auto mt-10 max-w-5xl px-4">
+    <div className="mx-auto mt-10 max-w-5xl px-4 pb-10">
       <h1 className="mb-4 text-2xl font-semibold">Manage User Roles</h1>
       <p className="mb-6 text-gray-600">Admins can update the role for each Firebase user profile.</p>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="admin-user-filter">
+          Filter users
+        </label>
+        <input
+          id="admin-user-filter"
+          type="search"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search by email, UID, or role"
+          className="w-full rounded border px-3 py-2 text-sm"
+        />
+      </div>
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
       {loading ? (
         <p className="text-gray-600">Loading users...</p>
       ) : (
-        <div className="overflow-hidden rounded border bg-white shadow-sm">
+        <div className="overflow-x-auto rounded border bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -87,7 +116,7 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {users.map((item) => (
+              {filteredUsers.map((item) => (
                 <tr key={item.uid} className="border-t">
                   <td className="px-4 py-3">{item.email}</td>
                   <td className="px-4 py-3 break-all text-xs text-gray-500">{item.uid}</td>
@@ -113,6 +142,11 @@ export default function AdminUsers() {
                   </td>
                 </tr>
               ))}
+              {filteredUsers.length === 0 ? (
+                <tr className="border-t">
+                  <td className="px-4 py-4 text-sm text-gray-600" colSpan={4}>No users match your filter.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
