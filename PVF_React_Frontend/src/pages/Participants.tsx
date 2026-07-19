@@ -989,8 +989,6 @@ export default function Participants() {
 
     <h2>Notes</h2>
     <div class="notes">
-      <div class="note-line"><span class="note-label">Screening Decision</span><span>${display(stationTwo.decision)}</span></div>
-      <div class="note-line"><span class="note-label">Exam Outcome</span><span>${display(eyeExam?.decision ?? '')}</span></div>
       <div class="note-blank">&nbsp;</div>
       <div class="note-blank">&nbsp;</div>
       <div class="note-blank">&nbsp;</div>
