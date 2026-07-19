@@ -1,4 +1,5 @@
-import { collection, doc, deleteDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, deleteDoc, getCountFromServer, getDocs, query, setDoc, where } from 'firebase/firestore';
+import type { QueryConstraint } from 'firebase/firestore';
 import { db } from './firebase';
 
 export type StationDecision = 'PASS' | 'FAIL' | 'REFERRAL' | 'FRAME';
@@ -128,7 +129,27 @@ export interface CustomerRecord {
   participant?: ParticipantProfile;
 }
 
+export interface DashboardStats {
+  registered: number;
+  checkedIn: number;
+  screened: number;
+  passed: number;
+  failed: number;
+  examRouted: number;
+  examCompleted: number;
+  examInQueue: number;
+  referralOut: number;
+  rxFrameSelected: number;
+}
+
+export interface DashboardEventOption {
+  eventName: string;
+  eventDate: string;
+  createdAt: string;
+}
+
 const STATION_IDS = ['check-in', 'vision-screening', 'eye-exam', 'frame-selection', 'vision-success'] as const;
+const FIRESTORE_IN_QUERY_LIMIT = 30;
 
 function sortStationStatuses(stationStatuses: StationStatus[]): StationStatus[] {
   const stationOrder = new Map<string, number>(STATION_IDS.map((id, index) => [id, index]));
@@ -412,6 +433,143 @@ export async function getCustomers(): Promise<CustomerRecord[]> {
     participant: customer.participant ?? normalizeParticipant(customer),
     Events: Array.isArray(customer.Events) ? customer.Events.map(normalizeEventRecord) : []
   }));
+}
+
+function createEmptyDashboardStats(): DashboardStats {
+  return {
+    registered: 0,
+    checkedIn: 0,
+    screened: 0,
+    passed: 0,
+    failed: 0,
+    examRouted: 0,
+    examCompleted: 0,
+    examInQueue: 0,
+    referralOut: 0,
+    rxFrameSelected: 0
+  };
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function getCount(collectionName: string, constraints: QueryConstraint[]): Promise<number> {
+  const snapshot = await getCountFromServer(query(collection(db, collectionName), ...constraints));
+  return snapshot.data().count;
+}
+
+async function getStationCount(stationId: string, constraints: QueryConstraint[], eventIds?: string[]): Promise<number> {
+  const baseConstraints = [where('id', '==', stationId), ...constraints];
+
+  if (!eventIds) {
+    return getCount('stationStatuses', baseConstraints);
+  }
+
+  if (eventIds.length === 0) {
+    return 0;
+  }
+
+  const counts = await Promise.all(chunkValues(eventIds, FIRESTORE_IN_QUERY_LIMIT).map(chunk =>
+    getCount('stationStatuses', [...baseConstraints, where('eventId', 'in', chunk)])
+  ));
+
+  return counts.reduce((total, count) => total + count, 0);
+}
+
+export async function getDashboardEventOptions(): Promise<DashboardEventOption[]> {
+  const eventsSnapshot = await getDocs(collection(db, 'events'));
+  const byName = new Map<string, DashboardEventOption>();
+
+  for (const eventDoc of eventsSnapshot.docs) {
+    const data = eventDoc.data() as Partial<EventRecord>;
+    if (!data.eventName) {
+      continue;
+    }
+
+    const option = {
+      eventName: data.eventName,
+      eventDate: data.eventDate ?? '',
+      createdAt: data.createdAt ?? ''
+    };
+    const existing = byName.get(data.eventName);
+    if (!existing || sortEventOptionByRecency(option, existing) < 0) {
+      byName.set(data.eventName, option);
+    }
+  }
+
+  return Array.from(byName.values()).sort(sortEventOptionByRecency);
+}
+
+function sortEventOptionByRecency(left: DashboardEventOption, right: DashboardEventOption): number {
+  const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
+  const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
+
+  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+    return 0;
+  }
+  if (Number.isNaN(leftTime)) {
+    return 1;
+  }
+  if (Number.isNaN(rightTime)) {
+    return -1;
+  }
+
+  return rightTime - leftTime;
+}
+
+export async function getDashboardStats(viewMode: 'this' | 'all', selectedEventName: string): Promise<DashboardStats> {
+  let eventIds: string[] | undefined;
+  let registered = 0;
+
+  if (viewMode === 'this') {
+    if (!selectedEventName) {
+      return createEmptyDashboardStats();
+    }
+
+    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('eventName', '==', selectedEventName)));
+    eventIds = eventsSnapshot.docs.map(eventDoc => eventDoc.id);
+    registered = eventIds.length;
+  } else {
+    registered = await getCount('events', []);
+  }
+
+  const [
+    checkedIn,
+    screened,
+    passed,
+    failed,
+    examCompleted,
+    examInQueue,
+    referralOut,
+    rxFrameSelected
+  ] = await Promise.all([
+    getStationCount('check-in', [where('status', '==', 'complete')], eventIds),
+    getStationCount('vision-screening', [where('status', '==', 'complete')], eventIds),
+    getStationCount('vision-screening', [where('decision', '==', 'PASS')], eventIds),
+    getStationCount('vision-screening', [where('decision', '==', 'FAIL')], eventIds),
+    getStationCount('eye-exam', [where('status', '==', 'complete')], eventIds),
+    getStationCount('eye-exam', [where('status', '==', 'current')], eventIds),
+    getStationCount('eye-exam', [where('decision', '==', 'REFERRAL')], eventIds),
+    getStationCount('frame-selection', [where('status', '==', 'complete')], eventIds)
+  ]);
+
+  return {
+    registered,
+    checkedIn,
+    screened,
+    passed,
+    failed,
+    examRouted: failed,
+    examCompleted,
+    examInQueue,
+    referralOut,
+    rxFrameSelected
+  };
 }
 
 export async function saveCustomers(customers: CustomerRecord[]): Promise<void> {
