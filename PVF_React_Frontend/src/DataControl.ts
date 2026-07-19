@@ -128,12 +128,7 @@ export interface CustomerRecord {
   participant?: ParticipantProfile;
 }
 
-const storageKey = 'pvf-participant-events-v1';
-const customerStorageKey = 'pvf-participant-customers-v1';
-
 const STATION_IDS = ['check-in', 'vision-screening', 'eye-exam', 'frame-selection', 'vision-success'] as const;
-
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function toSerializable(value: unknown): unknown {
   if (value === undefined) {
@@ -323,11 +318,6 @@ function normalizeRegistrationEventOption(event: Partial<RegistrationEventOption
   };
 }
 
-function stripEventsFromCustomer(customer: CustomerRecord): CustomerRecord {
-  const { Events: _events, ...customerWithoutEvents } = customer;
-  return customerWithoutEvents;
-}
-
 function sortRegistrationEventOptions(left: RegistrationEventOption, right: RegistrationEventOption): number {
   const leftTime = Date.parse(left.eventDate || left.createdAt || '1970-01-01');
   const rightTime = Date.parse(right.eventDate || right.createdAt || '1970-01-01');
@@ -347,53 +337,13 @@ function sortRegistrationEventOptions(left: RegistrationEventOption, right: Regi
   return rightTime - leftTime;
 }
 
-function readStoredEvents(): Record<string, EventRecord[]> {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-
-  const storedValue = window.localStorage.getItem(storageKey);
-  if (!storedValue) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(storedValue) as Record<string, EventRecord[]>;
-    return parsed;
-  } catch {
-    return {};
-  }
-}
-
-function readStoredCustomers(): CustomerRecord[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  const storedValue = window.localStorage.getItem(customerStorageKey);
-  if (!storedValue) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(storedValue) as CustomerRecord[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-async function readCustomersFromFirebase(): Promise<CustomerRecord[] | null> {
+async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
   try {
     const [participantsSnapshot, eventsSnapshot, stationStatusesSnapshot] = await Promise.all([
       getDocs(collection(db, 'participants')),
       getDocs(collection(db, 'events')),
       getDocs(collection(db, 'stationStatuses'))
     ]);
-
-    if (participantsSnapshot.empty) {
-      return null;
-    }
 
     // Build station statuses map: eventId -> StationStatus[]
     const stationsByEvent: Record<string, StationStatus[]> = {};
@@ -437,91 +387,40 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[] | null> {
       } satisfies CustomerRecord;
     });
   } catch (error) {
-    console.warn('Unable to load participants from Firestore, using local data instead.', error);
-    return null;
+    console.warn('Unable to load participants from Firestore.', error);
+    return [];
   }
 }
 
 export async function getCustomers(): Promise<CustomerRecord[]> {
-  await wait(300);
-
   const firebaseCustomers = await readCustomersFromFirebase();
-  if (firebaseCustomers && firebaseCustomers.length > 0) {
-    const storedEvents = readStoredEvents();
-    const normalizedCustomers = firebaseCustomers.map(customer => {
-      const email = customer.Email?.toLowerCase();
-      const persistedEvents = email ? storedEvents[email] ?? [] : [];
-      const firebaseEvents = Array.isArray(customer.Events) ? customer.Events.map(normalizeEventRecord) : [];
-      const eventsToUse = firebaseEvents.length > 0 ? firebaseEvents : persistedEvents;
 
-      return {
-        ...customer,
-        Email: customer.Email ?? '',
-        participant: customer.participant ?? normalizeParticipant(customer),
-        Events: eventsToUse
-      };
-    });
-
-    return normalizedCustomers;
-  }
-
-  const storedEvents = readStoredEvents();
-  const storedCustomers = readStoredCustomers();
-
-  return storedCustomers.map(customer => {
-    const email = customer.Email?.toLowerCase();
-    const persistedEvents = email ? storedEvents[email] ?? [] : [];
-    const normalizedEvents = persistedEvents.map(normalizeEventRecord);
-
-    return {
-      ...customer,
-      Email: customer.Email ?? '',
-      participant: customer.participant ?? normalizeParticipant(customer),
-      Events: customer.Events ?? normalizedEvents
-    };
-  });
+  return firebaseCustomers.map(customer => ({
+    ...customer,
+    Email: customer.Email ?? '',
+    participant: customer.participant ?? normalizeParticipant(customer),
+    Events: Array.isArray(customer.Events) ? customer.Events.map(normalizeEventRecord) : []
+  }));
 }
 
 export async function saveCustomers(customers: CustomerRecord[]): Promise<void> {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const eventMap = customers.reduce<Record<string, EventRecord[]>>((accumulator, customer) => {
-    if (customer.Email) {
-      accumulator[customer.Email.toLowerCase()] = (customer.Events ?? []).map(normalizeEventRecord);
-    }
-    return accumulator;
-  }, {});
-
-  window.localStorage.setItem(storageKey, JSON.stringify(eventMap));
-  window.localStorage.setItem(customerStorageKey, JSON.stringify(customers.map(customer => ({
-    ...stripEventsFromCustomer(customer),
-    participant: customer.participant ? toSerializable(customer.participant) as ParticipantProfile : undefined,
-  }))));
-
-  try {
-    await Promise.all(customers.map((customer, index) => {
-      const normalizedEmail = customer.Email?.trim().toLowerCase();
-      const documentId = normalizedEmail || customer.id || `customer-${index}`;
-      const participantId = customer.id ?? documentId;
-      const { Events, ...customerWithoutEvents } = customer;
-      const payload = toSerializable({
-        ...customerWithoutEvents,
-        Email: normalizedEmail ?? customer.Email
-      }) as Record<string, unknown>;
-      const saveParticipant = setDoc(doc(db, 'participants', documentId), payload, { merge: true });
-      const saveEvents = Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
-      return Promise.all([saveParticipant, saveEvents]);
-    }));
-  } catch (error) {
-    console.warn('Unable to save participants to Firestore; local storage was updated instead.', error);
-  }
+  await Promise.all(customers.map((customer, index) => {
+    const normalizedEmail = customer.Email?.trim().toLowerCase();
+    const documentId = normalizedEmail || customer.id || `customer-${index}`;
+    const participantId = customer.id ?? documentId;
+    const { Events, ...customerWithoutEvents } = customer;
+    const payload = toSerializable({
+      ...customerWithoutEvents,
+      Email: normalizedEmail ?? customer.Email
+    }) as Record<string, unknown>;
+    const saveParticipant = setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+    const saveEvents = Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
+    return Promise.all([saveParticipant, saveEvents]);
+  }));
 }
 
 export async function saveRegistrationCustomer(customer: CustomerRecord): Promise<void> {
   await saveCustomerToFirebase(customer);
-  saveCustomerToLocalStorage(customer);
 }
 
 async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocumentId?: string): Promise<void> {
@@ -541,26 +440,6 @@ async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocument
 
   await setDoc(doc(db, 'participants', documentId), payload, { merge: true });
   await Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
-}
-
-function saveCustomerToLocalStorage(customer: CustomerRecord) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const normalizedEmail = customer.Email?.trim().toLowerCase();
-  const storedCustomers = readStoredCustomers();
-  const nextCustomers = normalizedEmail
-    ? [
-      ...storedCustomers.filter(storedCustomer => storedCustomer.Email?.trim().toLowerCase() !== normalizedEmail),
-      stripEventsFromCustomer(customer)
-    ]
-    : [...storedCustomers, stripEventsFromCustomer(customer)];
-
-  window.localStorage.setItem(customerStorageKey, JSON.stringify(nextCustomers.map(storedCustomer => ({
-    ...stripEventsFromCustomer(storedCustomer),
-    participant: storedCustomer.participant ? toSerializable(storedCustomer.participant) as ParticipantProfile : undefined,
-  }))));
 }
 
 export async function deleteCustomerByEmail(email: string): Promise<void> {
@@ -628,40 +507,57 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRecord 
 }
 
 export async function getCustomersFromFirebase(): Promise<CustomerRecord[]> {
-  // Replace this with your Firebase query later.
   return getCustomers();
 }
 
 export async function getAllEvents(): Promise<EventRecord[]> {
-  const customers = await getCustomers();
-  const byId = new Map<string, EventRecord>();
+  try {
+    const [eventsSnapshot, stationStatusesSnapshot] = await Promise.all([
+      getDocs(collection(db, 'events')),
+      getDocs(collection(db, 'stationStatuses')),
+    ]);
 
-  for (const customer of customers) {
-    for (const event of customer.Events ?? []) {
-      if (!byId.has(event.id)) {
-        byId.set(event.id, normalizeEventRecord(event));
+    const stationsByEvent: Record<string, StationStatus[]> = {};
+    for (const statusDoc of stationStatusesSnapshot.docs) {
+      const data = statusDoc.data() as StationStatus & { eventId: string };
+      const { eventId, ...status } = data;
+      if (!stationsByEvent[eventId]) {
+        stationsByEvent[eventId] = [];
       }
+      stationsByEvent[eventId].push(status as StationStatus);
     }
+
+    return eventsSnapshot.docs
+      .map(eventDoc => {
+        const data = eventDoc.data() as EventRecord;
+        return normalizeEventRecord({
+          ...data,
+          id: data.id ?? eventDoc.id,
+          stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? []
+        });
+      })
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
+        const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
+
+        if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+          return 0;
+        }
+
+        if (Number.isNaN(leftTime)) {
+          return 1;
+        }
+
+        if (Number.isNaN(rightTime)) {
+          return -1;
+        }
+
+        return rightTime - leftTime;
+      });
+  } catch (error) {
+    console.warn('Unable to load participant events from Firestore.', error);
+    return [];
   }
-
-  return Array.from(byId.values()).sort((left, right) => {
-    const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
-    const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
-
-    if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
-      return 0;
-    }
-
-    if (Number.isNaN(leftTime)) {
-      return 1;
-    }
-
-    if (Number.isNaN(rightTime)) {
-      return -1;
-    }
-
-    return rightTime - leftTime;
-  });
 }
 
 export async function getRegistrationEvents(): Promise<RegistrationEventOption[]> {

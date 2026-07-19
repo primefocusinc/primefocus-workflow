@@ -141,7 +141,6 @@ export default function Participants() {
     async function loadData() {
       const data = await getCustomers();
       setCustomers(data);
-      await saveCustomers(data);
       const emailParam = params.email?.toLowerCase();
       const eventIdParam = searchParams.get('eventId')?.trim() ?? '';
       const customerWithEvent = eventIdParam
