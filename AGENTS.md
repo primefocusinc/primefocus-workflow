@@ -42,8 +42,8 @@ Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.
 ```
 
 ## Remotes
-- `origin` → `primefocusinc01/givecamp-primefocus-workflow` (no push access from this account)
-- `newfork` → `jbrinkman/givecamp-primefocus-workflow-1` (fork with push access — push branches here, then `gh pr create --base main --head jbrinkman:BRANCH --repo primefocusinc01/givecamp-primefocus-workflow`)
+- `origin` → `primefocusinc/primefocus-workflow` (no push access from this account)
+- Push branches to this repo directly if you have write access, then create a PR with `gh pr create --repo primefocusinc/primefocus-workflow`.
 - PRs must be merged by the repo owner; this account cannot merge.
 
 ## GCP Access
