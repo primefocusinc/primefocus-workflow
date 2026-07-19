@@ -701,27 +701,27 @@ export default function Registration() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_auto]">
                   <label>
-                    <FieldLabel required>Event name</FieldLabel>
+                    <FieldLabel >Event name</FieldLabel>
                     <input
                       value={eventCreationName}
                       onChange={(changeEvent) => setEventCreationName(changeEvent.target.value)}
                       className={inputClass}
                       placeholder="Back to School Vision 2026"
-                      required
+                      
                     />
                   </label>
                   <label>
-                    <FieldLabel required>Event date</FieldLabel>
+                    <FieldLabel >Event date</FieldLabel>
                     <input
                       type="date"
                       value={eventCreationDate}
                       onChange={(changeEvent) => setEventCreationDate(changeEvent.target.value)}
                       className={inputClass}
-                      required
+                      
                     />
                   </label>
                   <div className="flex items-end">
-                    <Button type="button" variant="contained" onClick={() => void handleCreateRegistrationEvent()} disabled={eventCreationSaving}>
+                    <Button type="button" variant="contained" onClick={() => void handleCreateRegistrationEvent()} disabled={eventCreationSaving || !eventCreationName || !eventCreationDate}>
                       {eventCreationSaving ? 'Creating...' : 'Create event'}
                     </Button>
                   </div>

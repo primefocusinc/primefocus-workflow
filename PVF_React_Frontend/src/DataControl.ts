@@ -323,6 +323,11 @@ function normalizeRegistrationEventOption(event: Partial<RegistrationEventOption
   };
 }
 
+function stripEventsFromCustomer(customer: CustomerRecord): CustomerRecord {
+  const { Events: _events, ...customerWithoutEvents } = customer;
+  return customerWithoutEvents;
+}
+
 function sortRegistrationEventOptions(left: RegistrationEventOption, right: RegistrationEventOption): number {
   const leftTime = Date.parse(left.eventDate || left.createdAt || '1970-01-01');
   const rightTime = Date.parse(right.eventDate || right.createdAt || '1970-01-01');
@@ -491,9 +496,8 @@ export async function saveCustomers(customers: CustomerRecord[]): Promise<void> 
 
   window.localStorage.setItem(storageKey, JSON.stringify(eventMap));
   window.localStorage.setItem(customerStorageKey, JSON.stringify(customers.map(customer => ({
-    ...customer,
+    ...stripEventsFromCustomer(customer),
     participant: customer.participant ? toSerializable(customer.participant) as ParticipantProfile : undefined,
-    Events: (customer.Events ?? []).map(normalizeEventRecord)
   }))));
 
   try {
@@ -549,14 +553,13 @@ function saveCustomerToLocalStorage(customer: CustomerRecord) {
   const nextCustomers = normalizedEmail
     ? [
       ...storedCustomers.filter(storedCustomer => storedCustomer.Email?.trim().toLowerCase() !== normalizedEmail),
-      customer
+      stripEventsFromCustomer(customer)
     ]
-    : [...storedCustomers, customer];
+    : [...storedCustomers, stripEventsFromCustomer(customer)];
 
   window.localStorage.setItem(customerStorageKey, JSON.stringify(nextCustomers.map(storedCustomer => ({
-    ...storedCustomer,
+    ...stripEventsFromCustomer(storedCustomer),
     participant: storedCustomer.participant ? toSerializable(storedCustomer.participant) as ParticipantProfile : undefined,
-    Events: (storedCustomer.Events ?? []).map(normalizeEventRecord)
   }))));
 }
 
