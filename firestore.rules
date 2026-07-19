@@ -57,7 +57,7 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      // Anyone can create an event record during registration.
+      // Anyone can create the initial event record during public registration.
       allow create: if true;
 
       // Only admins and doctors can read, update, or delete event records.
@@ -71,7 +71,7 @@ service cloud.firestore {
     }
 
     match /stationStatuses/{statusId} {
-      // Anyone can create a station status record during registration.
+      // Anyone can create the initial station statuses during public registration.
       allow create: if true;
 
       // Only admins and doctors can read, update, or delete station status records.
