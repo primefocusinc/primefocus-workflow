@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Button from '@mui/material/Button'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 type Question = {
   text: string
@@ -106,6 +106,8 @@ export default function VisionCheck({ initialType }: VisionCheckProps) {
   const [type, setType] = useState<'child' | 'adult' | null>(initialType ?? null)
   const [answers, setAnswers] = useState<Record<number, number>>({})
   const [finished, setFinished] = useState(false)
+  const [searchParams] = useSearchParams()
+  const isEmbed = searchParams.get('embed') === 'true'
 
   const questions = type === 'child' ? childQuestions : adultQuestions
 
@@ -154,11 +156,13 @@ export default function VisionCheck({ initialType }: VisionCheckProps) {
         <p className="mt-4 text-gray-700">{result.message}</p>
 
         <div className="mt-6 flex flex-wrap gap-4">
-          <Link to="/register">
-            <Button variant="contained" color="primary">
-              Register for a Community Vision Day
-            </Button>
-          </Link>
+          {!isEmbed && (
+            <Link to="/register">
+              <Button variant="contained" color="primary">
+                Register for a Community Vision Day
+              </Button>
+            </Link>
+          )}
           <Button variant="outlined" onClick={reset}>Start Over</Button>
         </div>
 
