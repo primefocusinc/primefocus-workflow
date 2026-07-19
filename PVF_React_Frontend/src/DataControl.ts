@@ -449,7 +449,13 @@ async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocument
     Email: normalizedEmail ?? customer.Email
   }) as Record<string, unknown>;
 
-  await setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+  try {
+    await setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+  } catch (error) {
+    console.error(`Failed to write participant ${documentId} to Firestore:`, error);
+    throw new Error(`Failed to save participant record: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   await Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
 }
 
@@ -513,16 +519,26 @@ async function saveEventDocToFirebase(event: EventRecord, participantId: string)
     participantId,
       stationStatuses: sortStationStatuses(stationStatuses),
   }) as Record<string, unknown>;
-  await setDoc(doc(db, 'events', event.id), eventPayload);
+  try {
+    await setDoc(doc(db, 'events', event.id), eventPayload);
+  } catch (error) {
+    console.error(`Failed to write event ${event.id} to Firestore:`, error);
+    throw new Error(`Failed to save event record: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  await Promise.all(sortStationStatuses(stationStatuses).map(status => {
+  await Promise.all(stationStatuses.map(async status => {
     const docId = `${event.id}_${status.id}`;
     const payload = toSerializable({
       ...status,
       eventId: event.id,
       participantId,
     }) as Record<string, unknown>;
-    return setDoc(doc(db, 'stationStatuses', docId), payload);
+    try {
+      await setDoc(doc(db, 'stationStatuses', docId), payload);
+    } catch (error) {
+      console.error(`Failed to write stationStatus ${docId} to Firestore:`, error);
+      throw new Error(`Failed to save station status record: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }));
 }
 
