@@ -5,6 +5,7 @@ import Button from '@mui/material/Button'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
+import { useSearchParams } from 'react-router'
 import { saveRegistrationCustomer, createRegistrationEvent, getRegistrationEvents, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationStatus } from '../DataControl'
 import { useAuth } from '../context/AuthContext'
 import RegistrationEventCreator from '../components/RegistrationEventCreator'
@@ -397,6 +398,7 @@ function Section({
 
 export default function Registration() {
   const { role } = useAuth()
+  const [searchParams] = useSearchParams()
   const [form, setForm] = useState<RegistrationForm>(() => createInitialForm())
   const [submitted, setSubmitted] = useState(false)
   const [submissionPayload, setSubmissionPayload] = useState<RegistrationSubmissionPayload | null>(null)
@@ -436,11 +438,17 @@ export default function Registration() {
       return
     }
 
+    const requestedEventId = searchParams.get('eventId')?.trim() ?? ''
+    const requestedEvent = requestedEventId
+      ? availableRegistrationEvents.find(event => event.id === requestedEventId)
+      : undefined
     const selectedStillExists = availableRegistrationEvents.some(event => event.id === form.event)
-    if (!form.event || !selectedStillExists) {
-      setForm(current => ({ ...current, event: availableRegistrationEvents[0].id }))
+    const nextEventId = requestedEvent?.id ?? availableRegistrationEvents[0].id
+
+    if (!form.event || !selectedStillExists || (requestedEvent && form.event !== requestedEvent.id)) {
+      setForm(current => ({ ...current, event: nextEventId }))
     }
-  }, [availableRegistrationEvents, form.event])
+  }, [availableRegistrationEvents, form.event, searchParams])
 
   const isChild = form.participantType === 'Child (Ages 5-17)'
   const phoneDigits = form.guardianPhone.replace(/\D/g, '')
