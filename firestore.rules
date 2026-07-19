@@ -57,8 +57,11 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      // Only admins and doctors can read or write event records.
-      allow read, write: if isAdminOrDoctor();
+      // Anyone can create the initial event record during public registration.
+      allow create: if true;
+
+      // Only admins and doctors can read, update, or delete event records.
+      allow read, update, delete: if isAdminOrDoctor();
     }
 
     match /registrationEvents/{eventId} {
@@ -68,8 +71,11 @@ service cloud.firestore {
     }
 
     match /stationStatuses/{statusId} {
-      // Only admins and doctors can read or write station status records.
-      allow read, write: if isAdminOrDoctor();
+      // Anyone can create the initial station statuses during public registration.
+      allow create: if true;
+
+      // Only admins and doctors can read, update, or delete station status records.
+      allow read, update, delete: if isAdminOrDoctor();
     }
   }
 }
