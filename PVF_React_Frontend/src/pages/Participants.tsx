@@ -662,13 +662,6 @@ export default function Participants() {
     const eyeExam = event.stationStatuses.find(station => station.id === 'eye-exam');
     const frameSelection = event.stationStatuses.find(station => station.id === 'frame-selection');
 
-    const communication = (participantProfile.contact.preferredCommunication || '').toLowerCase();
-    const selectedCommunication = {
-      phone: communication.includes('phone'),
-      text: communication.includes('text'),
-      email: communication.includes('email')
-    };
-
     const printHtml = `<!doctype html>
 <html>
 <head>
@@ -698,7 +691,7 @@ export default function Participants() {
       max-width: 900px;
       margin: 0 auto;
       border: 1px solid var(--line);
-      padding: 20px 20px 24px;
+      padding: 14px 16px 16px;
     }
 
     .heading {
@@ -709,7 +702,7 @@ export default function Participants() {
 
     h1 {
       margin: 0;
-      font-size: 22px;
+      font-size: 20px;
       letter-spacing: 0.3px;
       color: var(--accent);
     }
@@ -721,18 +714,26 @@ export default function Participants() {
     }
 
     h2 {
-      margin: 16px 0 8px;
-      font-size: 14px;
+      margin: 12px 0 6px;
+      font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 0.8px;
+      color: var(--accent);
+    }
+
+    h3 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
       color: var(--accent);
     }
 
     .field-grid {
       display: grid;
       grid-template-columns: 250px 1fr;
-      gap: 8px 14px;
-      font-size: 13px;
+      gap: 6px 12px;
+      font-size: 12px;
       align-items: end;
     }
 
@@ -749,20 +750,21 @@ export default function Participants() {
     .checks {
       display: flex;
       gap: 18px;
-      font-size: 13px;
-      margin: 3px 0 8px;
+      font-size: 12px;
+      margin: 3px 0 6px;
+      flex-wrap: wrap;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
-      margin-top: 6px;
+      font-size: 11px;
+      margin-top: 4px;
     }
 
     th, td {
       border: 1px solid var(--line);
-      padding: 6px;
+      padding: 4px 5px;
       vertical-align: middle;
       text-align: left;
     }
@@ -772,18 +774,42 @@ export default function Participants() {
       font-weight: 700;
     }
 
-    .line-block {
-      min-height: 16px;
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 8px;
+    .notes {
+      border: 1px solid var(--line);
+      padding: 6px 7px;
+      font-size: 11px;
     }
 
-    .staff-notes {
-      min-height: 78px;
+    .note-line {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px;
+      align-items: center;
+      min-height: 18px;
+    }
+
+    .note-line + .note-line {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid var(--line);
+    }
+
+    .note-label {
+      font-weight: 600;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .result-card {
       border: 1px solid var(--line);
-      margin-top: 6px;
-      padding: 6px;
-      white-space: pre-wrap;
+      padding: 7px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     @media print {
@@ -795,6 +821,10 @@ export default function Participants() {
         border: none;
         max-width: none;
         padding: 0;
+      }
+
+      .result-grid {
+        gap: 8px;
       }
     }
   </style>
@@ -827,109 +857,90 @@ export default function Participants() {
       <div class="label">ZIP Code</div><div class="value">${display(participantProfile.address.zipCode)}</div>
     </div>
 
-    <h2>Preferred Method of Communication</h2>
-    <div class="checks">
-      <span>${mark(selectedCommunication.phone)} Phone</span>
-      <span>${mark(selectedCommunication.text)} Text Message</span>
-      <span>${mark(selectedCommunication.email)} Email</span>
-    </div>
-
-    <h2>Vision History</h2>
-    <div class="checks">
-      <span>Does the participant currently wear glasses?</span>
-      <span>${mark(isYes(participantProfile.visionIntake.wearsGlasses))} Yes</span>
-      <span>${mark(isNo(participantProfile.visionIntake.wearsGlasses))} No</span>
-    </div>
-    <div class="checks">
-      <span>Does the participant wear contact lenses?</span>
-      <span>${mark(isYes(participantProfile.visionIntake.wearsContacts))} Yes</span>
-      <span>${mark(isNo(participantProfile.visionIntake.wearsContacts))} No</span>
-    </div>
-
-    <h2>Screening Station Results</h2>
-    <div class="checks">
-      <span>Wearing glasses during screening?</span>
-      <span>${mark(isYes(participantProfile.visionIntake.wearsGlasses))} Y</span>
-      <span>${mark(isNo(participantProfile.visionIntake.wearsGlasses))} N</span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Eye</th>
-          <th>Visual Acuity (before correction)</th>
-          <th>Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Right (OD)</td>
-          <td>____/____</td>
-          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
-        </tr>
-        <tr>
-          <td>Left (OS)</td>
-          <td>____/____</td>
-          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
-        </tr>
-        <tr>
-          <td>Both (OU)</td>
-          <td>____/____</td>
-          <td>P [ ] &nbsp;&nbsp; F [ ]</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h2>Exam Station</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Eye</th>
-          <th>Sphere</th>
-          <th>Cylinder</th>
-          <th>Axis</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Right</td>
-          <td></td>
-          <td></td>
-          <td>X</td>
-        </tr>
-        <tr>
-          <td>Left</td>
-          <td></td>
-          <td></td>
-          <td>X</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h2>Eyeglasses should be worn</h2>
-    <div class="checks">
-      <span>[ ] Distance</span>
-      <span>[ ] Reading</span>
-      <span>[ ] Classwork Only</span>
-      <span>[ ] Full-Time</span>
-    </div>
-
     <h2>Notes</h2>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-    <div class="line-block"></div>
-
-    <h2>Frame Selection Station</h2>
-    <div class="field-grid">
-      <div class="label">Frame Selection</div><div class="value">${display(frameSelection?.frameSelection ?? '')}</div>
+    <div class="notes">
+      <div class="note-line"><span class="note-label">Screening Decision</span><span>${display(stationTwo.decision)}</span></div>
+      <div class="note-line"><span class="note-label">Exam Outcome</span><span>${display(eyeExam?.decision ?? '')}</span></div>
     </div>
 
-    <h2>Staff Notes</h2>
-    <div class="staff-notes">Screening Decision: ${display(stationTwo.decision)}
-Exam Outcome: ${display(eyeExam?.decision ?? '')}</div>
+    <h2>Screening and Exam Results</h2>
+    <div class="result-grid">
+      <section class="result-card">
+        <h3>Screening Station Results</h3>
+        <div class="checks">
+          <span>Wearing glasses during screening?</span>
+          <span>${mark(isYes(participantProfile.visionIntake.wearsGlasses))} Y</span>
+          <span>${mark(isNo(participantProfile.visionIntake.wearsGlasses))} N</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Eye</th>
+              <th>Visual Acuity</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Right (OD)</td>
+              <td>____/____</td>
+              <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+            </tr>
+            <tr>
+              <td>Left (OS)</td>
+              <td>____/____</td>
+              <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+            </tr>
+            <tr>
+              <td>Both (OU)</td>
+              <td>____/____</td>
+              <td>P [ ] &nbsp;&nbsp; F [ ]</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="result-card">
+        <h3>Exam Station</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Eye</th>
+              <th>Sphere</th>
+              <th>Cylinder</th>
+              <th>Axis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Right</td>
+              <td></td>
+              <td></td>
+              <td>X</td>
+            </tr>
+            <tr>
+              <td>Left</td>
+              <td></td>
+              <td></td>
+              <td>X</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin-top: 10px;">Eyeglasses should be worn</h3>
+        <div class="checks">
+          <span>[ ] Distance</span>
+          <span>[ ] Reading</span>
+          <span>[ ] Classwork Only</span>
+          <span>[ ] Full-Time</span>
+        </div>
+
+        <h3 style="margin-top: 10px;">Frame Selection Station</h3>
+        <div class="field-grid">
+          <div class="label">Frame Selection</div><div class="value">${display(frameSelection?.frameSelection ?? '')}</div>
+        </div>
+      </section>
+    </div>
   </div>
 </body>
 </html>`;

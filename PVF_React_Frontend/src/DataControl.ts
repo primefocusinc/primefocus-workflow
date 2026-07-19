@@ -25,6 +25,14 @@ export interface EventRecord {
   stationStatuses: StationStatus[];
 }
 
+export interface RegistrationEventOption {
+  id: string;
+  eventName: string;
+  eventDate: string;
+  createdAt: string;
+  status: 'planned' | 'active' | 'completed';
+}
+
 export interface ParticipantDemographics {
   gender: string;
   race: string;
@@ -301,6 +309,37 @@ function normalizeEventRecord(event: EventRecord): EventRecord {
     ...event,
     createdAt: event.createdAt || new Date(event.eventDate || new Date().toISOString()).toISOString()
   };
+}
+
+function normalizeRegistrationEventOption(event: Partial<RegistrationEventOption> & { id: string }): RegistrationEventOption {
+  const today = new Date().toISOString().slice(0, 10);
+
+  return {
+    id: event.id,
+    eventName: (typeof event.eventName === 'string' && event.eventName.trim()) ? event.eventName.trim() : 'Community Vision Event',
+    eventDate: (typeof event.eventDate === 'string' && event.eventDate.trim()) ? event.eventDate.trim() : today,
+    createdAt: (typeof event.createdAt === 'string' && event.createdAt.trim()) ? event.createdAt.trim() : new Date().toISOString(),
+    status: event.status ?? 'active'
+  };
+}
+
+function sortRegistrationEventOptions(left: RegistrationEventOption, right: RegistrationEventOption): number {
+  const leftTime = Date.parse(left.eventDate || left.createdAt || '1970-01-01');
+  const rightTime = Date.parse(right.eventDate || right.createdAt || '1970-01-01');
+
+  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+    return 0;
+  }
+
+  if (Number.isNaN(leftTime)) {
+    return 1;
+  }
+
+  if (Number.isNaN(rightTime)) {
+    return -1;
+  }
+
+  return rightTime - leftTime;
 }
 
 function readStoredEvents(): Record<string, EventRecord[]> {
@@ -588,4 +627,30 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRecord 
 export async function getCustomersFromFirebase(): Promise<CustomerRecord[]> {
   // Replace this with your Firebase query later.
   return getCustomers();
+}
+
+export async function getRegistrationEvents(): Promise<RegistrationEventOption[]> {
+  try {
+    const snapshot = await getDocs(collection(db, 'registrationEvents'));
+    return snapshot.docs
+      .map(docSnapshot => normalizeRegistrationEventOption({ id: docSnapshot.id, ...(docSnapshot.data() as Partial<RegistrationEventOption>) }))
+      .sort(sortRegistrationEventOptions);
+  } catch (error) {
+    console.warn('Unable to load registration events from Firestore.', error);
+    return [];
+  }
+}
+
+export async function createRegistrationEvent(eventName: string, eventDate: string): Promise<RegistrationEventOption> {
+  const id = `registration-event-${Date.now()}`;
+  const normalized = normalizeRegistrationEventOption({
+    id,
+    eventName,
+    eventDate,
+    createdAt: new Date().toISOString(),
+    status: 'active'
+  });
+
+  await setDoc(doc(db, 'registrationEvents', id), normalized);
+  return normalized;
 }
