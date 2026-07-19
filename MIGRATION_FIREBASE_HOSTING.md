@@ -46,7 +46,7 @@ re-created in a new account with project ID `primefocus-workflow`.
 ### Configuration changes already made
 
 - `.firebaserc` updated to project `primefocus-workflow`.
-- `firestore.rules` syntax error fixed (`allow write;` → `allow write: if isAuthenticated();`).
+- `firestore.rules` participants rule corrected: anyone can create (anonymous registration), but only admins and doctors can read, update, or delete.
 - Documentation updated to reference `primefocus-workflow`.
 
 ## Phase 1: Firebase Hosting Setup (No Code Changes to App Logic)
@@ -261,7 +261,7 @@ re-created in a new account with project ID `primefocus-workflow`.
 
 1. **Router**: Keep `HashRouter` for the migration. The `firebase.json` rewrite rule is included for future `BrowserRouter` use.
 2. **Admin bootstrap**: Manual Firestore document creation (console approach) for the small fixed admin team.
-3. **Firestore rules for participants**: Strictly admin/doctor only for now. Basic users do not read participant records.
+3. **Firestore rules for participants**: Anyone can create a participant record (anonymous registration), but only admins and doctors can read, update, or delete them.
 4. **Custom domains**: Is a custom domain configured on Cloud Run that needs to be migrated to Firebase Hosting?
 5. **Preview channels**: Manual deployments via `workflow_dispatch` for now. PR preview channels can be added later if needed.
 6. **Container option**: Delete the frontend `Dockerfile` in Phase 5 since Firebase Hosting replaces it.

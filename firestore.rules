@@ -46,10 +46,14 @@ service cloud.firestore {
     }
 
     match /participants/{participantId} {
-       // Only admins and doctors can read participant records.
+      // Anyone (authenticated or anonymous) can create a participant record during registration.
+      allow create: if true;
+
+      // Only admins and doctors can read participant records.
       allow read: if isAdminOrDoctor();
-      // Every authenticated user needs to be able to register, so allow writes to /participants.
-      allow write: if isAuthenticated();
+
+      // Only admins and doctors can update or delete participant records.
+      allow update, delete: if isAdminOrDoctor();
     }
 
     match /events/{eventId} {
