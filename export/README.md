@@ -1,0 +1,38 @@
+# Firestore Backup Utility
+
+Backs up the `primefocus-workflow` Firestore database to local JSON files, organized by date and time.
+
+## Setup
+
+```bash
+cd export
+npm install
+```
+
+## Run a backup
+
+```bash
+npm run backup
+```
+
+Backups are written to `export/backup/YYYY-MM-DD_HH-MM-SS/`.
+
+## Authentication
+
+The script uses the service account key at the project root:
+
+```
+primefocus-workflow-438dcec8fc3a.json
+```
+
+If that file is missing, it falls back to the `GOOGLE_APPLICATION_CREDENTIALS` environment variable:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json npm run backup
+```
+
+The project-root key is always preferred so backups target the correct project even when other `GOOGLE_APPLICATION_CREDENTIALS` values are set in your shell.
+
+## Output format
+
+Each document is saved as a JSON file with its ID as the filename. Subcollections are nested under their parent document's folder. The JSON includes the document data plus `_id`, `_path`, `_createTime`, and `_updateTime` metadata.

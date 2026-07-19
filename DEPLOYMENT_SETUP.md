@@ -92,6 +92,42 @@ The `.env` file is gitignored. It contains public Firebase config values only.
 
 Production URL: https://primefocus-workflow.web.app
 
+## Database Backup
+
+A local backup utility is available in `export/`.
+
+It reads the Firestore database using the Firebase Admin SDK and writes each
+document to a JSON file inside a timestamped folder.
+
+### Run a backup
+
+```bash
+cd export
+npm install
+npm run backup
+```
+
+Backups are written to:
+
+```
+export/backup/YYYY-MM-DD_HH-MM-SS/
+```
+
+Each document is saved as `{documentId}.json` under its collection folder.
+Subcollections are nested under their parent document. The JSON includes
+`_id`, `_path`, `_createTime`, and `_updateTime` metadata.
+
+### Authentication
+
+The backup script uses the project-root service account key:
+
+```
+primefocus-workflow-438dcec8fc3a.json
+```
+
+If that key is missing, it falls back to the `GOOGLE_APPLICATION_CREDENTIALS`
+environment variable.
+
 ## Troubleshooting
 
 ### Workflow shows empty `VITE_FIREBASE_*` values
