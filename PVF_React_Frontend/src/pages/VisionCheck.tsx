@@ -98,15 +98,19 @@ function scoreToResult(yesCount: number) {
   return results.high
 }
 
-export default function VisionCheck() {
-  const [type, setType] = useState<'child' | 'adult' | null>(null)
+type VisionCheckProps = {
+  initialType?: 'child' | 'adult'
+}
+
+export default function VisionCheck({ initialType }: VisionCheckProps) {
+  const [type, setType] = useState<'child' | 'adult' | null>(initialType ?? null)
   const [answers, setAnswers] = useState<Record<number, number>>({})
   const [finished, setFinished] = useState(false)
 
   const questions = type === 'child' ? childQuestions : adultQuestions
 
   function reset() {
-    setType(null)
+    setType(initialType ?? null)
     setAnswers({})
     setFinished(false)
   }

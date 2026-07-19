@@ -1,6 +1,6 @@
 import { StrictMode, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter, Routes, Route, Link, Navigate } from 'react-router'
+import { HashRouter, Routes, Route, Link, Navigate, useSearchParams } from 'react-router'
 import './index.css'
 import Home from './pages/Home.tsx'
 import Registration from './pages/Registration.tsx'
@@ -18,7 +18,12 @@ import { auth } from './firebase.ts'
 
 function Nav() {
   const { user, role } = useAuth()
+  const [searchParams] = useSearchParams()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  if (searchParams.get('embed') === 'true') {
+    return null
+  }
 
   const visibleLinks = [
     { to: '/', label: 'Home' },
@@ -108,6 +113,8 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Home />} />
         <Route path="/vision-check" element={<VisionCheck />} />
+        <Route path="/vision-check/child" element={<VisionCheck initialType="child" />} />
+        <Route path="/vision-check/adult" element={<VisionCheck initialType="adult" />} />
         <Route path="/participants" element={<Participants />} />
         <Route path="/participants/:email" element={<Participants />} />
         <Route path="/dashboard" element={<Dashboard />} />
