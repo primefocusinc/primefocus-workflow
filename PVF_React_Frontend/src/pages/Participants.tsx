@@ -782,7 +782,6 @@ export default function Participants() {
     const isYes = (value: string | undefined) => (value ?? '').toLowerCase() === 'yes';
     const isNo = (value: string | undefined) => (value ?? '').toLowerCase() === 'no';
 
-    const eyeExam = event.stationStatuses.find(station => station.id === 'eye-exam');
     const frameSelection = event.stationStatuses.find(station => station.id === 'frame-selection');
 
     const printHtml = `<!doctype html>
