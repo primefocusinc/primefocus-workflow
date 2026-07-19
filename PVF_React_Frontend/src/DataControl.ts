@@ -130,6 +130,16 @@ export interface CustomerRecord {
 
 const STATION_IDS = ['check-in', 'vision-screening', 'eye-exam', 'frame-selection', 'vision-success'] as const;
 
+function sortStationStatuses(stationStatuses: StationStatus[]): StationStatus[] {
+  const stationOrder = new Map<string, number>(STATION_IDS.map((id, index) => [id, index]));
+
+  return [...stationStatuses].sort((left, right) => {
+    const leftOrder = stationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = stationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+}
+
 function toSerializable(value: unknown): unknown {
   if (value === undefined) {
     return null;
@@ -302,6 +312,7 @@ export function createDefaultParticipantProfile(): ParticipantProfile {
 function normalizeEventRecord(event: EventRecord): EventRecord {
   return {
     ...event,
+    stationStatuses: sortStationStatuses(event.stationStatuses ?? []),
     createdAt: event.createdAt || new Date(event.eventDate || new Date().toISOString()).toISOString()
   };
 }
@@ -487,10 +498,11 @@ async function saveEventDocToFirebase(event: EventRecord, participantId: string)
   const eventPayload = toSerializable({
     ...eventFields,
     participantId,
+      stationStatuses: sortStationStatuses(stationStatuses),
   }) as Record<string, unknown>;
   await setDoc(doc(db, 'events', event.id), eventPayload);
 
-  await Promise.all(stationStatuses.map(status => {
+  await Promise.all(sortStationStatuses(stationStatuses).map(status => {
     const docId = `${event.id}_${status.id}`;
     const payload = toSerializable({
       ...status,

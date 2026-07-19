@@ -42,6 +42,16 @@ const stationTemplates = [
 }
 ];
 
+const stationOrder = new Map<string, number>(stationTemplates.map((station, index) => [station.id, index]));
+
+function sortStationStatuses(stationStatuses: StationStatus[]): StationStatus[] {
+  return [...stationStatuses].sort((left, right) => {
+    const leftOrder = stationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = stationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+}
+
 function buildStationStatuses(): StationStatus[] {
   return stationTemplates.map((station, index) => ({
     id: station.id,
@@ -132,6 +142,7 @@ export default function Participants() {
   const [registrationEventsLoading, setRegistrationEventsLoading] = useState(true);
   const [selectedRegistrationEventId, setSelectedRegistrationEventId] = useState('');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [savingEventIds, setSavingEventIds] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -430,22 +441,22 @@ export default function Participants() {
   };
 
   const updateEvent = async (eventId: string, eventUpdates: Partial<EventRecord>) => {
-    let nextCustomers: CustomerRecord[] = [];
+    const nextCustomers = customers.map(customer => {
+      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+        return customer;
+      }
 
-    setCustomers(currentCustomers => {
-      nextCustomers = currentCustomers.map(customer => {
-        if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
-          return customer;
-        }
-
-        return {
-          ...customer,
-          Events: (customer.Events ?? []).map(event => event.id === eventId ? { ...event, ...eventUpdates } : event)
-        };
-      });
-
-      return nextCustomers;
+      return {
+        ...customer,
+        Events: (customer.Events ?? []).map(event => event.id === eventId ? {
+          ...event,
+          ...eventUpdates,
+          stationStatuses: sortStationStatuses((eventUpdates.stationStatuses ?? event.stationStatuses) as StationStatus[])
+        } : event)
+      };
     });
+
+    setCustomers(nextCustomers);
 
     try {
       await saveCustomers(nextCustomers);
@@ -455,31 +466,27 @@ export default function Participants() {
   };
 
   const updateEventStation = async (eventId: string, stationId: string, stationUpdates: Partial<StationStatus>) => {
-    let nextCustomers: CustomerRecord[] = [];
+    const nextCustomers = customers.map(customer => {
+      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+        return customer;
+      }
 
-    setCustomers(currentCustomers => {
-      nextCustomers = currentCustomers.map(customer => {
-        if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
-          return customer;
-        }
+      return {
+        ...customer,
+        Events: (customer.Events ?? []).map(event => {
+          if (event.id !== eventId) {
+            return event;
+          }
 
-        return {
-          ...customer,
-          Events: (customer.Events ?? []).map(event => {
-            if (event.id !== eventId) {
-              return event;
-            }
-
-            return {
-              ...event,
-              stationStatuses: event.stationStatuses.map(station => station.id === stationId ? { ...station, ...stationUpdates } : station)
-            };
-          })
-        };
-      });
-
-      return nextCustomers;
+          return {
+            ...event,
+            stationStatuses: sortStationStatuses(event.stationStatuses.map(station => station.id === stationId ? { ...station, ...stationUpdates } : station))
+          };
+        })
+      };
     });
+
+    setCustomers(nextCustomers);
 
     try {
       await saveCustomers(nextCustomers);
@@ -489,41 +496,37 @@ export default function Participants() {
   };
 
   const updateEyeExamDecision = async (eventId: string, decision: StationDecision) => {
-    let nextCustomers: CustomerRecord[] = [];
+    const nextCustomers = customers.map(customer => {
+      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+        return customer;
+      }
 
-    setCustomers(currentCustomers => {
-      nextCustomers = currentCustomers.map(customer => {
-        if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
-          return customer;
-        }
+      return {
+        ...customer,
+        Events: (customer.Events ?? []).map(event => {
+          if (event.id !== eventId) {
+            return event;
+          }
 
-        return {
-          ...customer,
-          Events: (customer.Events ?? []).map(event => {
-            if (event.id !== eventId) {
-              return event;
-            }
+          return {
+            ...event,
+            stationStatuses: sortStationStatuses(event.stationStatuses.map(station => {
+              if (station.id === 'eye-exam') {
+                return { ...station, decision };
+              }
 
-            return {
-              ...event,
-              stationStatuses: event.stationStatuses.map(station => {
-                if (station.id === 'eye-exam') {
-                  return { ...station, decision };
-                }
+              if (station.id === 'frame-selection') {
+                return { ...station, pboReferralConfirmed: false, frameSelection: '' };
+              }
 
-                if (station.id === 'frame-selection') {
-                  return { ...station, pboReferralConfirmed: false, frameSelection: '' };
-                }
-
-                return station;
-              })
-            };
-          })
-        };
-      });
-
-      return nextCustomers;
+              return station;
+            }))
+          };
+        })
+      };
     });
+
+    setCustomers(nextCustomers);
 
     try {
       await saveCustomers(nextCustomers);
@@ -532,9 +535,16 @@ export default function Participants() {
     }
   };
 
-  const handleAdvanceEvent = (eventId: string, eventStatus: string) => {
+  const handleAdvanceEvent = async (eventId: string, eventStatus: string) => {
+    if (savingEventIds[eventId]) {
+      return;
+    }
+
+    setSavingEventIds(current => ({ ...current, [eventId]: true }));
+
+    try {
     if (eventStatus === 'completed') {
-        handleResetEvent(eventId);
+        await handleResetEvent(eventId);
         return;
     }
     const currentEvent = participantEvents.find(event => event.id === eventId);
@@ -543,18 +553,19 @@ export default function Participants() {
       return;
     }
 
-    const currentStation = currentEvent.stationStatuses.find(station => station.status === 'current');
+    const orderedStationStatuses = sortStationStatuses(currentEvent.stationStatuses);
+    const currentStation = orderedStationStatuses.find(station => station.status === 'current');
 
     if (!currentStation) {
       return;
     }
 
     if (currentStation.id === 'vision-success') {
-      const stationStatuses: StationStatus[] = currentEvent.stationStatuses.map(station =>
+      const stationStatuses: StationStatus[] = sortStationStatuses(orderedStationStatuses.map(station =>
         station.id === 'vision-success' ? { ...station, status: 'complete' } : station
-      );
+      ));
 
-      updateEvent(eventId, {
+      await updateEvent(eventId, {
         stationStatuses,
         status: 'completed'
       });
@@ -570,8 +581,8 @@ export default function Participants() {
     }
 
     if (currentStation.id === 'frame-selection') {
-      const stationThree = currentEvent.stationStatuses.find(station => station.id === 'eye-exam');
-      const stationFour = currentEvent.stationStatuses.find(station => station.id === 'frame-selection');
+      const stationThree = orderedStationStatuses.find(station => station.id === 'eye-exam');
+      const stationFour = orderedStationStatuses.find(station => station.id === 'frame-selection');
 
       if (!stationThree || !stationFour) {
         return;
@@ -586,8 +597,8 @@ export default function Participants() {
       }
     }
 
-    const currentIndex = currentEvent.stationStatuses.findIndex(station => station.status === 'current');
-    const stationStatuses: StationStatus[] = currentEvent.stationStatuses.map((station, index): StationStatus => {
+    const currentIndex = orderedStationStatuses.findIndex(station => station.status === 'current');
+    const stationStatuses: StationStatus[] = sortStationStatuses(orderedStationStatuses.map((station, index): StationStatus => {
       if (index === currentIndex) {
         return { ...station, status: 'complete' };
       }
@@ -597,7 +608,7 @@ export default function Participants() {
       }
 
       return station;
-    });
+    }));
 
     let nextIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
 
@@ -623,13 +634,16 @@ export default function Participants() {
 
     const isCompleted = stationStatuses.every(station => station.status === 'complete' || station.status === 'skipped');
 
-    updateEvent(eventId, {
+    await updateEvent(eventId, {
       stationStatuses,
       status: isCompleted ? 'completed' : 'active'
     });
+    } finally {
+      setSavingEventIds(current => ({ ...current, [eventId]: false }));
+    }
   };
 
-  const handleResetEvent = (eventId: string) => {
+  const handleResetEvent = async (eventId: string) => {
     const currentEvent = participantEvents.find(event => event.id === eventId);
 
     if (!currentEvent) {
@@ -638,7 +652,7 @@ export default function Participants() {
 
     const stationStatuses = buildStationStatuses();
 
-    updateEvent(eventId, {
+    await updateEvent(eventId, {
       stationStatuses,
       status: 'active'
     });
@@ -1403,7 +1417,8 @@ export default function Participants() {
                   ) : (
                     <div className="space-y-4">
                       {sortedParticipantEvents.map(event => {
-                        const currentStation = event.stationStatuses.find(station => station.status === 'current');
+                        const orderedStatuses = sortStationStatuses(event.stationStatuses);
+                        const currentStation = orderedStatuses.find(station => station.status === 'current');
                         const isCurrentEvent = expandedEventId === event.id;
 
                         return (
@@ -1458,7 +1473,7 @@ export default function Participants() {
                                 </div>
 
                                 <div className="mt-4 grid gap-2">
-                                  {event.stationStatuses.map(station => (
+                                  {orderedStatuses.map(station => (
                                     <div
                                       key={station.id}
                                       className={`rounded border px-3 py-2 ${station.status === 'current' ? 'border-blue-400 bg-blue-50' : station.status === 'complete' ? 'border-green-300 bg-green-50' : station.status === 'skipped' ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}
@@ -1517,7 +1532,7 @@ export default function Participants() {
 
                                       {station.id === 'frame-selection' && (
                                         <div className="mt-3 rounded border border-gray-200 bg-white p-3">
-                                          {event.stationStatuses.find(candidate => candidate.id === 'eye-exam')?.decision === 'REFERRAL' ? (
+                                          {orderedStatuses.find(candidate => candidate.id === 'eye-exam')?.decision === 'REFERRAL' ? (
                                             <div className="space-y-2">
                                               <FormControlLabel
                                                 control={
@@ -1537,7 +1552,7 @@ export default function Participants() {
                                                 Open Prevent Blindness Ohio referral portal
                                               </a>
                                             </div>
-                                          ) : event.stationStatuses.find(candidate => candidate.id === 'eye-exam')?.decision === 'FRAME' ? (
+                                          ) : orderedStatuses.find(candidate => candidate.id === 'eye-exam')?.decision === 'FRAME' ? (
                                             <label className="text-sm font-medium text-gray-700">
                                               Frame selection
                                               <input
@@ -1558,13 +1573,14 @@ export default function Participants() {
 
                                 <div className="mt-4 flex flex-wrap gap-2">
                                   <button
-                                    onClick={() => handleAdvanceEvent(event.id, event.status)}
+                                    onClick={() => void handleAdvanceEvent(event.id, event.status)}
                                     disabled={
-                                      event.stationStatuses.some(station => station.status === 'current' && station.id === 'vision-screening' && !station.decision) ||
-                                      event.stationStatuses.some(station => station.status === 'current' && station.id === 'eye-exam' && !station.decision) ||
-                                      (event.stationStatuses.some(station => station.status === 'current' && station.id === 'frame-selection') && (() => {
-                                        const stationThree = event.stationStatuses.find(station => station.id === 'eye-exam');
-                                        const stationFour = event.stationStatuses.find(station => station.id === 'frame-selection');
+                                      Boolean(savingEventIds[event.id]) ||
+                                      orderedStatuses.some(station => station.status === 'current' && station.id === 'vision-screening' && !station.decision) ||
+                                      orderedStatuses.some(station => station.status === 'current' && station.id === 'eye-exam' && !station.decision) ||
+                                      (orderedStatuses.some(station => station.status === 'current' && station.id === 'frame-selection') && (() => {
+                                        const stationThree = orderedStatuses.find(station => station.id === 'eye-exam');
+                                        const stationFour = orderedStatuses.find(station => station.id === 'frame-selection');
 
                                         if (stationThree?.decision === 'REFERRAL') {
                                           return !(stationFour?.pboReferralConfirmed ?? false);
@@ -1579,10 +1595,17 @@ export default function Participants() {
                                     }
                                     className="rounded bg-green-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-400"
                                   >
-                                    {currentStation?.id === 'vision-success' ? 'Complete' : event.status === 'completed' ? 'Restart flow' : 'Advance to next station'}
+                                    {Boolean(savingEventIds[event.id])
+                                      ? 'Saving...'
+                                      : currentStation?.id === 'vision-success'
+                                        ? 'Complete'
+                                        : event.status === 'completed'
+                                          ? 'Restart flow'
+                                          : 'Advance to next station'}
                                   </button>
                                   <button
-                                    onClick={() => handleResetEvent(event.id)}
+                                    onClick={() => void handleResetEvent(event.id)}
+                                    disabled={Boolean(savingEventIds[event.id])}
                                     className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
                                   >
                                     Reset flow
