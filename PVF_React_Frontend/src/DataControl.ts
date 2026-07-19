@@ -1,4 +1,4 @@
-import { collection, doc, deleteDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, deleteDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { db } from './firebase';
 
 export type StationDecision = 'PASS' | 'FAIL' | 'REFERRAL' | 'FRAME';
@@ -16,6 +16,7 @@ export interface StationStatus {
 
 export interface EventRecord {
   id: string;
+  participantId: string;
   participantEmail: string;
   eventName: string;
   eventDate: string;
@@ -122,6 +123,8 @@ export interface CustomerRecord {
 
 const storageKey = 'pvf-participant-events-v1';
 const customerStorageKey = 'pvf-participant-customers-v1';
+
+const STATION_IDS = ['check-in', 'vision-screening', 'eye-exam', 'frame-selection', 'vision-success'] as const;
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -341,23 +344,55 @@ function readStoredCustomers(): CustomerRecord[] {
 
 async function readCustomersFromFirebase(): Promise<CustomerRecord[] | null> {
   try {
-    const snapshot = await getDocs(collection(db, 'participants'));
+    const [participantsSnapshot, eventsSnapshot, stationStatusesSnapshot] = await Promise.all([
+      getDocs(collection(db, 'participants')),
+      getDocs(collection(db, 'events')),
+      getDocs(collection(db, 'stationStatuses'))
+    ]);
 
-    if (snapshot.empty) {
+    if (participantsSnapshot.empty) {
       return null;
     }
 
-    return snapshot.docs.map(docSnapshot => {
+    // Build station statuses map: eventId -> StationStatus[]
+    const stationsByEvent: Record<string, StationStatus[]> = {};
+    for (const statusDoc of stationStatusesSnapshot.docs) {
+      const data = statusDoc.data() as StationStatus & { eventId: string };
+      const { eventId, ...status } = data;
+      if (!stationsByEvent[eventId]) {
+        stationsByEvent[eventId] = [];
+      }
+      stationsByEvent[eventId].push(status as StationStatus);
+    }
+
+    // Build events map: participantId -> EventRecord[]
+    const eventsByParticipant: Record<string, EventRecord[]> = {};
+    for (const eventDoc of eventsSnapshot.docs) {
+      const data = eventDoc.data() as EventRecord;
+      const participantId = data.participantId;
+      const event: EventRecord = {
+        ...data,
+        id: data.id ?? eventDoc.id,
+        stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? []
+      };
+      if (!eventsByParticipant[participantId]) {
+        eventsByParticipant[participantId] = [];
+      }
+      eventsByParticipant[participantId].push(normalizeEventRecord(event));
+    }
+
+    return participantsSnapshot.docs.map(docSnapshot => {
       const data = docSnapshot.data() as Partial<CustomerRecord>;
       const fallbackEmail = typeof data.Email === 'string' ? data.Email.trim() : docSnapshot.id;
       const normalizedEmail = fallbackEmail.toLowerCase();
+      const participantId = data.id ?? docSnapshot.id;
 
       return {
         ...(data as CustomerRecord),
-        id: data.id ?? docSnapshot.id,
+        id: participantId,
         Email: normalizedEmail,
         participant: data.participant ? data.participant : normalizeParticipant({ ...(data as CustomerRecord), Email: normalizedEmail }),
-        Events: Array.isArray(data.Events) ? (data.Events as EventRecord[]).map(normalizeEventRecord) : []
+        Events: eventsByParticipant[participantId] ?? []
       } satisfies CustomerRecord;
     });
   } catch (error) {
@@ -429,11 +464,15 @@ export async function saveCustomers(customers: CustomerRecord[]): Promise<void> 
     await Promise.all(customers.map((customer, index) => {
       const normalizedEmail = customer.Email?.trim().toLowerCase();
       const documentId = normalizedEmail || customer.id || `customer-${index}`;
+      const participantId = customer.id ?? documentId;
+      const { Events, ...customerWithoutEvents } = customer;
       const payload = toSerializable({
-        ...customer,
+        ...customerWithoutEvents,
         Email: normalizedEmail ?? customer.Email
       }) as Record<string, unknown>;
-      return setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+      const saveParticipant = setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+      const saveEvents = Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
+      return Promise.all([saveParticipant, saveEvents]);
     }));
   } catch (error) {
     console.warn('Unable to save participants to Firestore; local storage was updated instead.', error);
@@ -453,12 +492,15 @@ async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocument
     throw new Error('A participant email or id is required before saving to Firestore.');
   }
 
+  const participantId = customer.id ?? documentId;
+  const { Events, ...customerWithoutEvents } = customer;
   const payload = toSerializable({
-    ...customer,
+    ...customerWithoutEvents,
     Email: normalizedEmail ?? customer.Email
   }) as Record<string, unknown>;
 
   await setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+  await Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
 }
 
 function saveCustomerToLocalStorage(customer: CustomerRecord) {
@@ -489,15 +531,56 @@ export async function deleteCustomerByEmail(email: string): Promise<void> {
   }
 
   const customers = await getCustomers();
+  const target = customers.find(customer => customer.Email?.toLowerCase() === normalizedEmail);
   const nextCustomers = customers.filter(customer => customer.Email?.toLowerCase() !== normalizedEmail);
 
   await saveCustomers(nextCustomers);
 
   try {
     await deleteDoc(doc(db, 'participants', normalizedEmail));
+
+    // Delete all events and their station statuses for this participant
+    const participantId = target?.id ?? normalizedEmail;
+    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('participantId', '==', participantId)));
+    await Promise.all(eventsSnapshot.docs.map(async eventDoc => {
+      await deleteDoc(eventDoc.ref);
+      await Promise.all(STATION_IDS.map(stationId =>
+        deleteDoc(doc(db, 'stationStatuses', `${eventDoc.id}_${stationId}`))
+      ));
+    }));
   } catch (error) {
     console.warn('Unable to delete participant from Firestore; local storage was updated instead.', error);
   }
+}
+
+export async function deleteEventFromFirebase(eventId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'events', eventId));
+    await Promise.all(STATION_IDS.map(stationId =>
+      deleteDoc(doc(db, 'stationStatuses', `${eventId}_${stationId}`))
+    ));
+  } catch (error) {
+    console.warn('Unable to delete event from Firestore.', error);
+  }
+}
+
+async function saveEventDocToFirebase(event: EventRecord, participantId: string): Promise<void> {
+  const { stationStatuses, ...eventFields } = event;
+  const eventPayload = toSerializable({
+    ...eventFields,
+    participantId,
+  }) as Record<string, unknown>;
+  await setDoc(doc(db, 'events', event.id), eventPayload);
+
+  await Promise.all(stationStatuses.map(status => {
+    const docId = `${event.id}_${status.id}`;
+    const payload = toSerializable({
+      ...status,
+      eventId: event.id,
+      participantId,
+    }) as Record<string, unknown>;
+    return setDoc(doc(db, 'stationStatuses', docId), payload);
+  }));
 }
 
 export async function getCustomerByEmail(email: string): Promise<CustomerRecord | undefined> {
