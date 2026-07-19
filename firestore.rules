@@ -61,6 +61,12 @@ service cloud.firestore {
       allow read, write: if isAdminOrDoctor();
     }
 
+    match /registrationEvents/{eventId} {
+      // Registration pages need to read available events, but only admins can manage them.
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /stationStatuses/{statusId} {
       // Only admins and doctors can read or write station status records.
       allow read, write: if isAdminOrDoctor();

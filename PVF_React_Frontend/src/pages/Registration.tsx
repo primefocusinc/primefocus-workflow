@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import type { ReactNode } from 'react'
 import Button from '@mui/material/Button'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
-import { saveRegistrationCustomer, type CustomerRecord, type EventRecord, type ParticipantProfile, type StationStatus } from '../DataControl'
+import { saveRegistrationCustomer, createRegistrationEvent, getRegistrationEvents, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationStatus } from '../DataControl'
+import { useAuth } from '../context/AuthContext'
 
 type RegistrationForm = {
   event: string
@@ -70,7 +71,7 @@ type RegistrationSubmissionPayload = {
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const createInitialForm = (): RegistrationForm => ({
-  event: 'Community Vision Event',
+  event: '',
   participantType: '',
   firstName: '',
   lastName: '',
@@ -118,6 +119,14 @@ const createInitialForm = (): RegistrationForm => ({
 })
 
 const defaultEventName = 'Community Vision Event'
+
+const createFallbackRegistrationEvent = (): RegistrationEventOption => ({
+  id: 'default-community-vision-event',
+  eventName: defaultEventName,
+  eventDate: new Date().toISOString().slice(0, 10),
+  createdAt: new Date().toISOString(),
+  status: 'active',
+})
 
 const participantTypes = ['Child (Ages 5-17)', 'Adult (18+)']
 const communicationMethods = ['Phone', 'Text Message', 'Email']
@@ -174,7 +183,7 @@ const createParticipantId = (form: RegistrationForm, preparedAt: string) => {
   return `participant-${readableName || 'registration'}-${timestamp}`
 }
 
-const createRegistrationSubmissionPayload = (form: RegistrationForm): RegistrationSubmissionPayload => {
+const createRegistrationSubmissionPayload = (form: RegistrationForm, requestedEventName: string): RegistrationSubmissionPayload => {
   const preparedAt = new Date().toISOString()
   const normalizedPhone = normalizePhoneNumber(form.guardianPhone)
   const normalizedEmail = normalizeEmail(form.guardianEmail)
@@ -249,7 +258,7 @@ const createRegistrationSubmissionPayload = (form: RegistrationForm): Registrati
       createdAt: preparedAt,
       updatedAt: preparedAt,
     },
-    requestedEventName: form.event,
+    requestedEventName,
     submissionMeta: {
       source: 'public-registration-page',
       preparedAt,
@@ -386,11 +395,55 @@ function Section({
 }
 
 export default function Registration() {
+  const { role } = useAuth()
   const [form, setForm] = useState<RegistrationForm>(() => createInitialForm())
   const [submitted, setSubmitted] = useState(false)
   const [submissionPayload, setSubmissionPayload] = useState<RegistrationSubmissionPayload | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveError, setSaveError] = useState('')
+  const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
+  const [eventsLoading, setEventsLoading] = useState(true)
+  const [eventCreationName, setEventCreationName] = useState('')
+  const [eventCreationDate, setEventCreationDate] = useState(new Date().toISOString().slice(0, 10))
+  const [eventCreationSaving, setEventCreationSaving] = useState(false)
+  const [eventCreationError, setEventCreationError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadRegistrationEvents() {
+      setEventsLoading(true)
+      const loadedEvents = await getRegistrationEvents()
+
+      if (!cancelled) {
+        setRegistrationEvents(loadedEvents)
+        setEventsLoading(false)
+      }
+    }
+
+    loadRegistrationEvents()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const availableRegistrationEvents = useMemo(() => (
+    registrationEvents.length > 0
+      ? registrationEvents
+      : [createFallbackRegistrationEvent()]
+  ), [registrationEvents])
+
+  useEffect(() => {
+    if (!availableRegistrationEvents.length) {
+      return
+    }
+
+    const selectedStillExists = availableRegistrationEvents.some(event => event.id === form.event)
+    if (!form.event || !selectedStillExists) {
+      setForm(current => ({ ...current, event: availableRegistrationEvents[0].id }))
+    }
+  }, [availableRegistrationEvents, form.event])
 
   const isChild = form.participantType === 'Child (Ages 5-17)'
   const phoneDigits = form.guardianPhone.replace(/\D/g, '')
@@ -410,6 +463,7 @@ export default function Registration() {
   const requiredValues = useMemo(() => {
     const requiredValues = [
       form.participantType,
+      form.event,
       form.firstName,
       form.lastName,
       form.dateOfBirth,
@@ -506,7 +560,8 @@ export default function Registration() {
     event.preventDefault()
     if (!requiredFieldsComplete || phoneInvalid || emailInvalid) return
 
-    const payload = createRegistrationSubmissionPayload(form)
+    const selectedEvent = availableRegistrationEvents.find(event => event.id === form.event)
+    const payload = createRegistrationSubmissionPayload(form, selectedEvent?.eventName || defaultEventName)
     setSubmissionPayload(payload)
     setSaveStatus('saving')
     setSaveError('')
@@ -519,6 +574,35 @@ export default function Registration() {
       console.error('Failed to save registration', error)
       setSaveStatus('error')
       setSaveError('Unable to save this registration to the database. Please try again or contact an administrator.')
+    }
+  }
+
+  const handleCreateRegistrationEvent = async () => {
+    if (role !== 'admin') {
+      return
+    }
+
+    const trimmedName = eventCreationName.trim()
+    if (!trimmedName) {
+      setEventCreationError('Event name is required.')
+      return
+    }
+
+    setEventCreationSaving(true)
+    setEventCreationError('')
+
+    try {
+      const createdEvent = await createRegistrationEvent(trimmedName, eventCreationDate)
+      const refreshedEvents = await getRegistrationEvents()
+      setRegistrationEvents(refreshedEvents)
+      setForm(current => ({ ...current, event: createdEvent.id }))
+      setEventCreationName('')
+      setEventCreationDate(new Date().toISOString().slice(0, 10))
+    } catch (error) {
+      console.error('Failed to create registration event', error)
+      setEventCreationError('Unable to create this event right now.')
+    } finally {
+      setEventCreationSaving(false)
     }
   }
 
@@ -589,8 +673,62 @@ export default function Registration() {
           ) : null}
           <Section eyebrow="Section 1" title="Event Registration">
             <div className="rounded border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 md:col-span-2">
-              This registration is for the Community Vision Event, so no event selection is needed.
+              Select the event this participant should be registered for.
             </div>
+
+            <label>
+              <FieldLabel required>Event</FieldLabel>
+              <select
+                value={form.event}
+                onChange={handleInput('event')}
+                className={selectClass}
+                required
+                disabled={eventsLoading && registrationEvents.length === 0}
+              >
+                {availableRegistrationEvents.map((eventOption) => (
+                  <option key={eventOption.id} value={eventOption.id}>
+                    {eventOption.eventName} {eventOption.eventDate ? `(${eventOption.eventDate})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {role === 'admin' ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 md:col-span-2">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-amber-800">Admin only</p>
+                  <h3 className="mt-1 text-lg font-bold text-amber-900">Create a new registration event</h3>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_auto]">
+                  <label>
+                    <FieldLabel required>Event name</FieldLabel>
+                    <input
+                      value={eventCreationName}
+                      onChange={(changeEvent) => setEventCreationName(changeEvent.target.value)}
+                      className={inputClass}
+                      placeholder="Back to School Vision 2026"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel required>Event date</FieldLabel>
+                    <input
+                      type="date"
+                      value={eventCreationDate}
+                      onChange={(changeEvent) => setEventCreationDate(changeEvent.target.value)}
+                      className={inputClass}
+                      required
+                    />
+                  </label>
+                  <div className="flex items-end">
+                    <Button type="button" variant="contained" onClick={() => void handleCreateRegistrationEvent()} disabled={eventCreationSaving}>
+                      {eventCreationSaving ? 'Creating...' : 'Create event'}
+                    </Button>
+                  </div>
+                </div>
+                {eventCreationError ? <p className="mt-3 text-sm font-medium text-red-700">{eventCreationError}</p> : null}
+              </div>
+            ) : null}
 
             <label>
               <FieldLabel required>Participant Type</FieldLabel>
