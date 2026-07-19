@@ -5,7 +5,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { createDefaultParticipantProfile, deleteCustomerByEmail, deleteEventFromFirebase, getCustomers, getRegistrationEvents, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationDecision, type StationStatus } from '../DataControl';
+import { createDefaultParticipantProfile, deleteCustomerById, deleteEventFromFirebase, getCustomers, getRegistrationEvents, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type RegistrationEventOption, type StationDecision, type StationStatus } from '../DataControl';
 import { useAuth } from '../context/AuthContext';
 
 const stationTemplates = [
@@ -131,7 +131,7 @@ function sortEventsByRecency(left: EventRecord, right: EventRecord): number {
 
 export default function Participants() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
-  const [selectedEmail, setSelectedEmail] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<CustomerRecord>({});
@@ -152,31 +152,32 @@ export default function Participants() {
     async function loadData() {
       const data = await getCustomers();
       setCustomers(data);
-      const emailParam = params.email?.toLowerCase();
+      const customerKeyParam = params.email?.trim() ?? '';
       const eventIdParam = searchParams.get('eventId')?.trim() ?? '';
       const customerWithEvent = eventIdParam
         ? data.find(customer => customer.Events?.some(event => event.id === eventIdParam))
         : undefined;
 
-      if (emailParam) {
-        const match = data.find(customer => customer.Email?.toLowerCase() === emailParam);
+      if (customerKeyParam) {
+        const match = data.find(customer => customer.id === customerKeyParam)
+          ?? data.find(customer => customer.Email?.toLowerCase() === customerKeyParam.toLowerCase());
         if (match) {
-          setSelectedEmail(match.Email ?? '');
+          setSelectedCustomerId(match.id ?? '');
           setFormData(match);
           if (eventIdParam && match.Events?.some(event => event.id === eventIdParam)) {
             setExpandedEventId(eventIdParam);
           }
         } else if (customerWithEvent) {
-          setSelectedEmail(customerWithEvent.Email ?? '');
+          setSelectedCustomerId(customerWithEvent.id ?? '');
           setFormData(customerWithEvent);
           setExpandedEventId(eventIdParam);
         }
       } else if (customerWithEvent) {
-        setSelectedEmail(customerWithEvent.Email ?? '');
+        setSelectedCustomerId(customerWithEvent.id ?? '');
         setFormData(customerWithEvent);
         setExpandedEventId(eventIdParam);
       } else if (data[0]) {
-        setSelectedEmail(data[0].Email ?? '');
+        setSelectedCustomerId(data[0].id ?? '');
         setFormData(data[0]);
       }
       setLoading(false);
@@ -215,8 +216,8 @@ export default function Participants() {
   }, []);
 
   const selectedCustomer = useMemo(() => {
-    return customers.find(customer => customer.Email?.toLowerCase() === selectedEmail.toLowerCase()) ?? customers[0];
-  }, [customers, selectedEmail]);
+    return customers.find(customer => customer.id === selectedCustomerId) ?? customers[0];
+  }, [customers, selectedCustomerId]);
 
   const participantEvents = useMemo(() => selectedCustomer?.Events ?? [], [selectedCustomer]);
   const sortedParticipantEvents = useMemo(() => [...participantEvents].sort(sortEventsByRecency), [participantEvents]);
@@ -275,15 +276,19 @@ export default function Participants() {
   }, [participantEvents, sortedParticipantEvents, searchParams]);
 
   const handleSelect = (customer: CustomerRecord) => {
-    const email = customer.Email ?? '';
-    setSelectedEmail(email);
+    const participantId = customer.id ?? '';
+    if (!participantId) {
+      return;
+    }
+
+    setSelectedCustomerId(participantId);
     setEditing(false);
-    navigate(`/participants/${encodeURIComponent(email)}`);
+    navigate(`/participants/${encodeURIComponent(participantId)}`);
   };
 
   const handleSave = async () => {
     const nextCustomers = customers.map(customer => {
-      if (customer.Email?.toLowerCase() === formData.Email?.toLowerCase()) {
+      if (customer.id === selectedCustomer?.id) {
         return {
           ...customer,
           ...formData,
@@ -307,20 +312,20 @@ export default function Participants() {
   };
 
   const handleDeleteParticipant = async () => {
-    if (!selectedCustomer?.Email) {
+    if (!selectedCustomer?.id) {
       return;
     }
 
-    const confirmed = window.confirm(`Delete participant ${selectedCustomer.Email}? This removes their record and all saved events.`)
+    const confirmed = window.confirm(`Delete participant ${selectedCustomer.Email || selectedCustomer.id}? This removes their record and all saved events.`)
     if (!confirmed) {
       return;
     }
 
     try {
-      await deleteCustomerByEmail(selectedCustomer.Email)
-      const remainingCustomers = customers.filter(customer => customer.Email?.toLowerCase() !== selectedCustomer.Email?.toLowerCase())
+      await deleteCustomerById(selectedCustomer.id)
+      const remainingCustomers = customers.filter(customer => customer.id !== selectedCustomer.id)
       setCustomers(remainingCustomers)
-      setSelectedEmail(remainingCustomers[0]?.Email ?? '')
+      setSelectedCustomerId(remainingCustomers[0]?.id ?? '')
       setFormData(remainingCustomers[0] ?? {})
       setParticipantProfile(remainingCustomers[0]?.participant ?? createDefaultParticipantProfile())
       setEditing(false)
@@ -442,7 +447,7 @@ export default function Participants() {
 
   const updateEvent = async (eventId: string, eventUpdates: Partial<EventRecord>) => {
     const nextCustomers = customers.map(customer => {
-      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+      if (customer.id !== selectedCustomer?.id) {
         return customer;
       }
 
@@ -467,7 +472,7 @@ export default function Participants() {
 
   const updateEventStation = async (eventId: string, stationId: string, stationUpdates: Partial<StationStatus>) => {
     const nextCustomers = customers.map(customer => {
-      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+      if (customer.id !== selectedCustomer?.id) {
         return customer;
       }
 
@@ -497,7 +502,7 @@ export default function Participants() {
 
   const updateEyeExamDecision = async (eventId: string, decision: StationDecision) => {
     const nextCustomers = customers.map(customer => {
-      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+      if (customer.id !== selectedCustomer?.id) {
         return customer;
       }
 
@@ -660,7 +665,7 @@ export default function Participants() {
 
   const handleDeleteEvent = async (eventId: string) => {
     const nextCustomers = customers.map(customer => {
-      if (customer.Email?.toLowerCase() !== selectedEmail.toLowerCase()) {
+      if (customer.id !== selectedCustomer?.id) {
         return customer;
       }
 
@@ -1207,11 +1212,12 @@ export default function Participants() {
             {filteredCustomers.map(customer => {
               const fullName = `${customer['First Name'] ?? ''} ${customer['Last Name'] ?? ''}`.trim();
               const email = customer.Email ?? '';
+              const customerId = customer.id ?? '';
               return (
                 <button
-                  key={email}
+                  key={customerId || email}
                   onClick={() => handleSelect(customer)}
-                  className={`w-full text-left rounded-md border px-3 py-2 ${selectedEmail.toLowerCase() === email.toLowerCase() ? 'bg-blue-50 border-blue-400' : 'bg-white hover:bg-gray-50'}`}
+                  className={`w-full text-left rounded-md border px-3 py-2 ${selectedCustomer?.id === customer.id ? 'bg-blue-50 border-blue-400' : 'bg-white hover:bg-gray-50'}`}
                 >
                   <div className="font-medium">{fullName || 'Unnamed participant'}</div>
                   <div className="text-sm text-gray-500">{email}</div>

@@ -417,7 +417,7 @@ export async function getCustomers(): Promise<CustomerRecord[]> {
 export async function saveCustomers(customers: CustomerRecord[]): Promise<void> {
   await Promise.all(customers.map((customer, index) => {
     const normalizedEmail = customer.Email?.trim().toLowerCase();
-    const documentId = normalizedEmail || customer.id || `customer-${index}`;
+    const documentId = customer.id || normalizedEmail || `customer-${index}`;
     const participantId = customer.id ?? documentId;
     const { Events, ...customerWithoutEvents } = customer;
     const payload = toSerializable({
@@ -436,7 +436,7 @@ export async function saveRegistrationCustomer(customer: CustomerRecord): Promis
 
 async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocumentId?: string): Promise<void> {
   const normalizedEmail = customer.Email?.trim().toLowerCase();
-  const documentId = normalizedEmail || customer.id || fallbackDocumentId;
+  const documentId = customer.id || normalizedEmail || fallbackDocumentId;
 
   if (!documentId) {
     throw new Error('A participant email or id is required before saving to Firestore.');
@@ -461,16 +461,29 @@ export async function deleteCustomerByEmail(email: string): Promise<void> {
 
   const customers = await getCustomers();
   const target = customers.find(customer => customer.Email?.toLowerCase() === normalizedEmail);
-  const nextCustomers = customers.filter(customer => customer.Email?.toLowerCase() !== normalizedEmail);
+  if (!target?.id) {
+    return;
+  }
+
+  await deleteCustomerById(target.id);
+}
+
+export async function deleteCustomerById(participantId: string): Promise<void> {
+  const normalizedParticipantId = participantId.trim();
+  if (!normalizedParticipantId) {
+    return;
+  }
+
+  const customers = await getCustomers();
+  const nextCustomers = customers.filter(customer => customer.id !== normalizedParticipantId);
 
   await saveCustomers(nextCustomers);
 
   try {
-    await deleteDoc(doc(db, 'participants', normalizedEmail));
+    await deleteDoc(doc(db, 'participants', normalizedParticipantId));
 
     // Delete all events and their station statuses for this participant
-    const participantId = target?.id ?? normalizedEmail;
-    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('participantId', '==', participantId)));
+    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('participantId', '==', normalizedParticipantId)));
     await Promise.all(eventsSnapshot.docs.map(async eventDoc => {
       await deleteDoc(eventDoc.ref);
       await Promise.all(STATION_IDS.map(stationId =>
