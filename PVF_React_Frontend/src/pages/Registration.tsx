@@ -312,6 +312,7 @@ function buildRegistrationEvent(payload: RegistrationSubmissionPayload): EventRe
 
   return {
     id: `${payload.participant.contact.email}-${Date.now()}`,
+    participantId: payload.participant.id,
     participantEmail: payload.participant.contact.email,
     eventName: payload.requestedEventName || defaultEventName,
     eventDate: today,

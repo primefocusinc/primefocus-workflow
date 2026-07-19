@@ -5,7 +5,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { Link, useNavigate, useParams } from 'react-router';
-import { createDefaultParticipantProfile, deleteCustomerByEmail, getCustomers, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type StationDecision, type StationStatus } from '../DataControl';
+import { createDefaultParticipantProfile, deleteCustomerByEmail, deleteEventFromFirebase, getCustomers, saveCustomers, type CustomerRecord, type EventRecord, type ParticipantProfile, type StationDecision, type StationStatus } from '../DataControl';
 import { useAuth } from '../context/AuthContext';
 
 const stationTemplates = [
@@ -51,11 +51,12 @@ function buildStationStatuses(): StationStatus[] {
   }));
 }
 
-function buildNewEvent(participantEmail: string, eventName: string): EventRecord {
+function buildNewEvent(participantId: string, participantEmail: string, eventName: string): EventRecord {
   const today = new Date().toISOString().slice(0, 10);
 
   return {
     id: `${participantEmail}-${Date.now()}`,
+    participantId,
     participantEmail,
     eventName: eventName.trim() || 'Community Vision Event',
     eventDate: today,
@@ -314,7 +315,8 @@ export default function Participants() {
       return;
     }
 
-    const newEvent = buildNewEvent(selectedCustomer.Email, eventNameDraft);
+    const participantId = selectedCustomer.participant?.id ?? selectedCustomer.id ?? selectedCustomer.Email;
+    const newEvent = buildNewEvent(participantId, selectedCustomer.Email, eventNameDraft);
     setExpandedEventId(newEvent.id);
     const nextCustomers = customers.map(customer => {
       if (customer.Email?.toLowerCase() !== selectedCustomer.Email?.toLowerCase()) {
@@ -351,16 +353,18 @@ export default function Participants() {
   };
 
   const handleAddEventToAll = async () => {
-    const selectedCustomerEvent = buildNewEvent(selectedCustomer?.Email ?? '', eventNameDraft);
+    const selectedParticipantId = selectedCustomer?.participant?.id ?? selectedCustomer?.id ?? selectedCustomer?.Email ?? '';
+    const selectedCustomerEvent = buildNewEvent(selectedParticipantId, selectedCustomer?.Email ?? '', eventNameDraft);
     setExpandedEventId(selectedCustomerEvent.id);
     const nextCustomers = customers.map(customer => {
       if (!customer.Email) {
         return customer;
       }
 
+      const participantId = customer.participant?.id ?? customer.id ?? customer.Email;
       const newEvent = customer.Email.toLowerCase() === selectedCustomer?.Email?.toLowerCase()
         ? selectedCustomerEvent
-        : buildNewEvent(customer.Email, eventNameDraft);
+        : buildNewEvent(participantId, customer.Email, eventNameDraft);
 
       return {
         ...customer,
@@ -605,7 +609,10 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
-      await saveCustomers(nextCustomers);
+      await Promise.all([
+        saveCustomers(nextCustomers),
+        deleteEventFromFirebase(eventId)
+      ]);
     } catch (error) {
       console.error('Failed saving participant after deleting event', error);
     }
