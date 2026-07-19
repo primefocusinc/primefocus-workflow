@@ -5,7 +5,10 @@ const path = require('path')
 const { initializeApp, cert } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 
-const SERVICE_ACCOUNT_PATH = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(__dirname, '..', 'primefocus-workflow-438dcec8fc3a.json')
+const PROJECT_ROOT_KEY = path.join(__dirname, '..', 'primefocus-workflow-438dcec8fc3a.json')
+const SERVICE_ACCOUNT_PATH = fs.existsSync(PROJECT_ROOT_KEY)
+  ? PROJECT_ROOT_KEY
+  : process.env.GOOGLE_APPLICATION_CREDENTIALS
 const BACKUP_ROOT = path.join(__dirname, 'backup')
 
 function timestampFolderName() {

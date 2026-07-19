@@ -25,11 +25,13 @@ The script uses the service account key at the project root:
 primefocus-workflow-438dcec8fc3a.json
 ```
 
-You can override the path with the `GOOGLE_APPLICATION_CREDENTIALS` environment variable:
+If that file is missing, it falls back to the `GOOGLE_APPLICATION_CREDENTIALS` environment variable:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json npm run backup
 ```
+
+The project-root key is always preferred so backups target the correct project even when other `GOOGLE_APPLICATION_CREDENTIALS` values are set in your shell.
 
 ## Output format
 
