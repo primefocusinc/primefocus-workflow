@@ -3,9 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter, Routes, Route, Link, Navigate } from 'react-router'
 import './index.css'
 import Home from './pages/Home.tsx'
-import About from './pages/About.tsx'
 import Registration from './pages/Registration.tsx'
-import Resources from './pages/Resources.tsx'
 import VisionCheck from './pages/VisionCheck.tsx'
 import Register from './pages/Register.tsx'
 import LogIn from './pages/LogIn.tsx'
@@ -24,10 +22,8 @@ function Nav() {
 
   const visibleLinks = [
     { to: '/', label: 'Home' },
-    { to: '/about', label: 'About' },
     { to: '/register', label: 'Register' },
     { to: '/vision-check', label: 'Vision Check' },
-    { to: '/resources', label: 'Resources' },
   ]
 
   if (user && (role === 'doctor' || role === 'admin')) {
@@ -111,9 +107,7 @@ function AppRoutes() {
       <Route path="/register" element={<Registration />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
         <Route path="/vision-check" element={<VisionCheck />} />
-        <Route path="/resources" element={<Resources />} />
         <Route path="/participants" element={<Participants />} />
         <Route path="/participants/:email" element={<Participants />} />
         <Route path="/dashboard" element={<Dashboard />} />
