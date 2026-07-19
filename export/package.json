@@ -1,0 +1,12 @@
+{
+  "name": "primefocus-firestore-export",
+  "version": "1.0.0",
+  "description": "Backup Prime Focus Firestore database to local JSON files",
+  "main": "backup.js",
+  "scripts": {
+    "backup": "node backup.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}
