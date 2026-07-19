@@ -1,27 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import RegistrationEventCreator from '../components/RegistrationEventCreator'
-import { createRegistrationEvent, getAllEvents, getCustomers, getRegistrationEvents, type CustomerRecord, type EventRecord, type RegistrationEventOption } from '../DataControl'
+import { createRegistrationEvent, getRegistrationEvents, type RegistrationEventOption } from '../DataControl'
 import { useAuth } from '../context/AuthContext'
 
 const archivo = { fontFamily: 'Archivo, sans-serif' }
-
-function sortByRecency(left: EventRecord, right: EventRecord): number {
-  const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01')
-  const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01')
-
-  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
-    return 0
-  }
-  if (Number.isNaN(leftTime)) {
-    return 1
-  }
-  if (Number.isNaN(rightTime)) {
-    return -1
-  }
-
-  return rightTime - leftTime
-}
 
 function sortRegistrationEvents(left: RegistrationEventOption, right: RegistrationEventOption): number {
   const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01')
@@ -42,40 +25,18 @@ function sortRegistrationEvents(left: RegistrationEventOption, right: Registrati
 
 export default function AdminEvents() {
   const { user, role } = useAuth()
-  const [participantEvents, setParticipantEvents] = useState<EventRecord[]>([])
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([])
-  const [customers, setCustomers] = useState<CustomerRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
-      const [loadedParticipantEvents, loadedRegistrationEvents, loadedCustomers] = await Promise.all([
-        getAllEvents(),
-        getRegistrationEvents(),
-        getCustomers(),
-      ])
-
-      setParticipantEvents(loadedParticipantEvents.sort(sortByRecency))
+      const loadedRegistrationEvents = await getRegistrationEvents()
       setRegistrationEvents(loadedRegistrationEvents.sort(sortRegistrationEvents))
-      setCustomers(loadedCustomers)
       setLoading(false)
     }
 
     loadData()
   }, [])
-
-  const participantById = useMemo(() => {
-    const map = new Map<string, CustomerRecord>()
-
-    for (const customer of customers) {
-      const participantId = customer.participant?.id ?? customer.id ?? ''
-      if (participantId) {
-        map.set(participantId, customer)
-      }
-    }
-
-    return map
-  }, [customers])
 
   const refreshRegistrationEvents = async () => {
     const refreshedEvents = await getRegistrationEvents()
@@ -112,7 +73,7 @@ export default function AdminEvents() {
               </span>
             </div>
             <p className="mt-2 max-w-3xl text-sm text-[#7d919c]">
-              This page shows the shared registration event catalog and the participant event records used by the participants page.
+              This page shows the shared registration event catalog used by the registration page and participant tracking.
             </p>
           </div>
           <Link
@@ -171,66 +132,6 @@ export default function AdminEvents() {
             </div>
           </section>
 
-          <section className="rounded-[16px] border border-[#22303b] bg-[#18232c] p-5">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-[#f2f5f3]" style={archivo}>Participant Event Records</h2>
-                <p className="mt-1 text-sm text-[#7d919c]">These are the events stored for participants and shown in the participants page.</p>
-              </div>
-            </div>
-            <div className="overflow-x-auto rounded-[12px] border border-[#22303b]">
-              <table className="min-w-full border-collapse text-left text-sm">
-                <thead className="bg-[#22303b] text-[#d5dce0]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Event name</th>
-                    <th className="px-4 py-3 font-semibold">Event id</th>
-                    <th className="px-4 py-3 font-semibold">Participant</th>
-                    <th className="px-4 py-3 font-semibold">Date</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {participantEvents.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-6 text-[#7d919c]" colSpan={6}>
-                        No participant events found.
-                      </td>
-                    </tr>
-                  ) : (
-                    participantEvents.map((event) => {
-                      const participant = participantById.get(event.participantId)
-                      const displayName = participant
-                        ? `${participant['First Name'] ?? participant.participant?.firstName ?? ''} ${participant['Last Name'] ?? participant.participant?.lastName ?? ''}`.trim()
-                        : ''
-
-                      return (
-                        <tr key={event.id} className="border-t border-[#22303b] text-[#f2f5f3]">
-                          <td className="px-4 py-3 font-semibold text-[#6fb3c0]">{event.eventName || 'Untitled event'}</td>
-                          <td className="px-4 py-3 font-mono text-xs text-[#d5dce0]">{event.id}</td>
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-[#f2f5f3]">{displayName || 'Unknown participant'}</div>
-                            <div className="text-xs text-[#7d919c]">{participant?.Email || event.participantEmail || 'No email available'}</div>
-                            <div className="text-xs text-[#7d919c]">Participant id: {event.participantId}</div>
-                          </td>
-                          <td className="px-4 py-3 text-[#d5dce0]">{event.eventDate || 'No date'}</td>
-                          <td className="px-4 py-3 text-[#d5dce0]">{event.status}</td>
-                          <td className="px-4 py-3">
-                            <Link
-                              to={`/participants?eventId=${encodeURIComponent(event.id)}`}
-                              className="rounded bg-[#3d8b99] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#4a9aaa]"
-                            >
-                              Open in participants
-                            </Link>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
         </div>
       </div>
     </main>

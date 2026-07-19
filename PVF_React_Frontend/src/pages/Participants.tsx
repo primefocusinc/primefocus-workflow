@@ -141,6 +141,7 @@ export default function Participants() {
   const [registrationEvents, setRegistrationEvents] = useState<RegistrationEventOption[]>([]);
   const [registrationEventsLoading, setRegistrationEventsLoading] = useState(true);
   const [selectedRegistrationEventId, setSelectedRegistrationEventId] = useState('');
+  const [participantEventFilterId, setParticipantEventFilterId] = useState('all');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [savingEventIds, setSavingEventIds] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
@@ -227,20 +228,76 @@ export default function Participants() {
     [registrationEvents, selectedRegistrationEventId]
   );
 
+  const participantEventFilterOptions = useMemo(() => {
+    const options = [{ id: 'all', label: 'All events', eventName: '' }];
+    const seenEventNames = new Set<string>();
+
+    registrationEvents.forEach(event => {
+      if (!event.eventName || seenEventNames.has(event.eventName)) {
+        return;
+      }
+
+      seenEventNames.add(event.eventName);
+      options.push({ id: event.id, label: event.eventName, eventName: event.eventName });
+    });
+
+    customers.forEach(customer => {
+      (customer.Events ?? []).forEach(event => {
+        if (!event.eventName || seenEventNames.has(event.eventName)) {
+          return;
+        }
+
+        seenEventNames.add(event.eventName);
+        options.push({ id: `event-name:${event.eventName}`, label: event.eventName, eventName: event.eventName });
+      });
+    });
+
+    return options;
+  }, [registrationEvents, customers]);
+
+  const selectedParticipantEventFilterName = useMemo(() => {
+    if (participantEventFilterId === 'all') {
+      return '';
+    }
+
+    return participantEventFilterOptions.find(option => option.id === participantEventFilterId)?.eventName ?? '';
+  }, [participantEventFilterId, participantEventFilterOptions]);
+
   const filteredCustomers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    if (!normalizedSearch) {
-      return customers;
-    }
 
     return customers.filter(customer => {
       const fullName = `${customer['First Name'] ?? ''} ${customer['Last Name'] ?? ''}`.trim().toLowerCase();
       const email = (customer.Email ?? '').toLowerCase();
+      const matchesSearch = !normalizedSearch || fullName.includes(normalizedSearch) || email.includes(normalizedSearch);
+      const matchesEvent = !selectedParticipantEventFilterName || (customer.Events ?? []).some(event => event.eventName === selectedParticipantEventFilterName);
 
-      return fullName.includes(normalizedSearch) || email.includes(normalizedSearch);
+      return matchesSearch && matchesEvent;
     });
-  }, [customers, searchTerm]);
+  }, [customers, searchTerm, selectedParticipantEventFilterName]);
+
+  useEffect(() => {
+    if (participantEventFilterId === 'all') {
+      return;
+    }
+
+    const filterStillExists = participantEventFilterOptions.some(option => option.id === participantEventFilterId);
+    if (!filterStillExists) {
+      setParticipantEventFilterId('all');
+    }
+  }, [participantEventFilterId, participantEventFilterOptions]);
+
+  useEffect(() => {
+    if (!filteredCustomers.length) {
+      setSelectedCustomerId('');
+      return;
+    }
+
+    const selectedStillVisible = filteredCustomers.some(customer => customer.id === selectedCustomer?.id);
+    if (!selectedStillVisible) {
+      setSelectedCustomerId(filteredCustomers[0].id ?? '');
+    }
+  }, [filteredCustomers, selectedCustomer]);
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -1208,6 +1265,16 @@ export default function Participants() {
             placeholder="Search by name or email"
             className="mb-3 w-full rounded border px-3 py-2 text-sm"
           />
+          <select
+            value={participantEventFilterId}
+            onChange={(event) => setParticipantEventFilterId(event.target.value)}
+            className="mb-3 w-full rounded border px-3 py-2 text-sm"
+          >
+            {participantEventFilterOptions.map(option => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <p className="mb-3 text-xs text-gray-500">Showing {filteredCustomers.length} participant{filteredCustomers.length === 1 ? '' : 's'}</p>
           <div className="space-y-2">
             {filteredCustomers.map(customer => {
               const fullName = `${customer['First Name'] ?? ''} ${customer['Last Name'] ?? ''}`.trim();
