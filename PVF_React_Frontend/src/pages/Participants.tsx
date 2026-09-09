@@ -198,6 +198,10 @@ export default function Participants() {
   // to Firestore on every keystroke.
   const pendingEventSaves = useRef<Map<string, EventRecord>>(new Map());
   const eventSaveTimers = useRef<Map<string, number>>(new Map());
+  // Track participant IDs deleted in this session so that any in-flight
+  // saveCustomerToFirebase call can skip the write and avoid resurrecting a
+  // deleted document (setDoc with merge:true recreates missing docs).
+  const deletedParticipantIds = useRef<Set<string>>(new Set());
 
   const enqueueEventSave = (eventRecord: EventRecord): Promise<void> => {
     const previous =
@@ -492,8 +496,9 @@ export default function Participants() {
   };
 
   const handleSave = async () => {
+    const targetId = selectedCustomer?.id;
     const nextCustomers = customers.map((customer) => {
-      if (customer.id === selectedCustomer?.id) {
+      if (customer.id === targetId) {
         return {
           ...customer,
           ...formData,
@@ -509,10 +514,13 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.id === selectedCustomer?.id,
-      );
-      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
+      const updatedCustomer = nextCustomers.find((c) => c.id === targetId);
+      // Guard: skip write if the participant was deleted while this save was
+      // being prepared — setDoc with merge:true would otherwise recreate the
+      // Firestore document.
+      if (updatedCustomer && !deletedParticipantIds.current.has(targetId ?? "")) {
+        await saveCustomerToFirebase(updatedCustomer);
+      }
     } catch (error) {
       console.error("Failed saving participant after edit", error);
     }
@@ -531,6 +539,10 @@ export default function Participants() {
       return;
     }
 
+    // Mark as deleted immediately so any in-flight saveCustomerToFirebase call
+    // (e.g. from handleSave) skips its write rather than recreating the doc.
+    deletedParticipantIds.current.add(selectedCustomer.id);
+
     try {
       await deleteCustomerById(selectedCustomer.id);
       const remainingCustomers = customers.filter(
@@ -545,6 +557,8 @@ export default function Participants() {
       setEditing(false);
       navigate("/participants");
     } catch (error) {
+      // Undo the deletion mark so subsequent saves are not incorrectly blocked.
+      deletedParticipantIds.current.delete(selectedCustomer.id);
       console.error("Failed deleting participant", error);
     }
   };

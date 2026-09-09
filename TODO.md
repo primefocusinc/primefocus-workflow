@@ -20,11 +20,12 @@ data-integrity, and maintainability concerns.
       are serialized through a per-event promise queue so writes cannot complete out of
       order. Pending debounced saves are cancelled on event delete and flushed on unmount.
 
-- [ ] **Delete race condition reduced, not eliminated.**
-      Any in-flight `saveCustomerToFirebase` (including `handleAddEventToAll`,
-      `Participants.tsx:636`) can resurrect a concurrently deleted participant because
-      `setDoc(..., { merge: true })` recreates missing docs. The original "deleted record
-      reappears" failure mode is still reachable.
+- [x] **Delete race condition reduced, not eliminated.**
+      Fixed: `deletedParticipantIds` ref tracks IDs deleted in the current session.
+      `handleDeleteParticipant` marks the ID before awaiting Firestore (and removes it
+      on failure). `handleSave` checks the set before calling `saveCustomerToFirebase`
+      and skips the write if the participant has been deleted, preventing the
+      `setDoc(merge:true)` resurrection.
 
 ## Medium priority
 
