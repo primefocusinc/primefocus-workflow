@@ -186,6 +186,7 @@ export default function Participants() {
   const [savingEventIds, setSavingEventIds] = useState<Record<string, boolean>>(
     {},
   );
+  const [saveError, setSaveError] = useState<string>("");
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -211,6 +212,7 @@ export default function Participants() {
       .then(() => saveParticipantEvent(eventRecord))
       .catch((error) => {
         console.error(`Failed saving event ${eventRecord.id}`, error);
+        setSaveError("Event changes could not be saved. Please try again.");
       });
     eventSaveQueues.current.set(eventRecord.id, next);
     return next;
@@ -458,6 +460,7 @@ export default function Participants() {
       setParticipantProfile(
         selectedCustomer.participant ?? createDefaultParticipantProfile(),
       );
+      setSaveError("");
     }
   }, [selectedCustomer]);
 
@@ -501,6 +504,7 @@ export default function Participants() {
   };
 
   const handleSave = async () => {
+    setSaveError("");
     const targetId = selectedCustomer?.id;
     const nextCustomers = customers.map((customer) => {
       if (customer.id === targetId) {
@@ -528,6 +532,7 @@ export default function Participants() {
       }
     } catch (error) {
       console.error("Failed saving participant after edit", error);
+      setSaveError("Participant could not be saved. Please try again.");
     }
     setEditing(false);
   };
@@ -679,6 +684,7 @@ export default function Participants() {
     if (!selectedRegistrationEvent || !selectedCustomer?.Email) {
       return;
     }
+    setSaveError("");
 
     const selectedParticipantId =
       selectedCustomer?.participant?.id ??
@@ -1048,6 +1054,7 @@ export default function Participants() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
+    setSaveError("");
     const eventToDelete = participantEvents.find((e) => e.id === eventId);
     const participantName =
       `${selectedCustomer?.["First Name"] ?? ""} ${selectedCustomer?.["Last Name"] ?? ""}`.trim() ||
@@ -1085,6 +1092,7 @@ export default function Participants() {
       await deleteEventFromFirebase(eventId);
     } catch (error) {
       console.error("Failed deleting event", error);
+      setSaveError("Event could not be removed. Please try again.");
     }
   };
 
@@ -1765,6 +1773,12 @@ export default function Participants() {
         <section className="border rounded-lg p-6 bg-white shadow-sm">
           {selectedCustomer ? (
             <>
+              {saveError && (
+                <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {saveError}
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold text-blue-800">

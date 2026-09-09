@@ -36,13 +36,11 @@ data-integrity, and maintainability concerns.
       index-free identity). Participants always carry an `id` so the fallback chain
       is no longer needed.
 
-- [ ] **Silent failure on optimistic updates.**
-      All Participants.tsx handlers update React state first and only `console.error` on save
-      failure (e.g., lines 446-449, 636-642). With `saveCustomerToFirebase` now throwing on a
-      missing `id`, a user can see a "successful" edit that was never persisted and vanishes on
-      refresh. `handleAddEventToAll`'s `Promise.all` has no partial-failure handling — some
-      participants save, some don't, with no rollback or user feedback.
-      Fix: surface save errors in the UI and consider reverting optimistic state on failure.
+- [x] **Silent failure on optimistic updates.**
+      Fixed: added `saveError` state rendered as a banner in the detail panel.
+      `handleSave`, `handleDeleteEvent`, `handleAddEventToAll`, and `enqueueEventSave`
+      (covering debounced event saves) all set a user-visible message on failure.
+      The error clears when a new action starts or the selected participant changes.
 
 - [ ] **Name-based filter fallback edge cases** (`Participants.tsx:337-344`):
   - Two catalog entries sharing an `eventName` cause legacy records to match both filters.
