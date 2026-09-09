@@ -11,7 +11,7 @@ import {
   deleteEventFromFirebase,
   getCustomers,
   getRegistrationEvents,
-  saveCustomers,
+  saveCustomerToFirebase,
   type CustomerRecord,
   type EventRecord,
   type ParticipantProfile,
@@ -440,7 +440,10 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
-      await saveCustomers(nextCustomers);
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.id === selectedCustomer?.id,
+      );
+      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
     } catch (error) {
       console.error("Failed saving participant after edit", error);
     }
@@ -462,7 +465,7 @@ export default function Participants() {
     try {
       await deleteCustomerById(selectedCustomer.id);
       const remainingCustomers = customers.filter(
-        (customer) => customer.id !== selectedCustomer.id,
+        (c) => c.id !== selectedCustomer.id,
       );
       setCustomers(remainingCustomers);
       setSelectedCustomerId(remainingCustomers[0]?.id ?? "");
@@ -575,7 +578,10 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
-      await saveCustomers(nextCustomers);
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.Email?.toLowerCase() === selectedCustomer.Email?.toLowerCase(),
+      );
+      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
     } catch (error) {
       console.error("Failed saving participant after adding event", error);
     }
@@ -627,7 +633,7 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
-      await saveCustomers(nextCustomers);
+      await Promise.all(nextCustomers.map((c) => saveCustomerToFirebase(c)));
     } catch (error) {
       console.error(
         "Failed saving participants when adding event to all",
@@ -665,7 +671,10 @@ export default function Participants() {
     setCustomers(nextCustomers);
 
     try {
-      await saveCustomers(nextCustomers);
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.id === selectedCustomer?.id,
+      );
+      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
     } catch (error) {
       console.error("Failed saving participant after event update", error);
     }
@@ -705,7 +714,10 @@ export default function Participants() {
     setCustomers(nextCustomers);
 
     try {
-      await saveCustomers(nextCustomers);
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.id === selectedCustomer?.id,
+      );
+      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
     } catch (error) {
       console.error("Failed saving participant after station update", error);
     }
@@ -754,7 +766,10 @@ export default function Participants() {
     setCustomers(nextCustomers);
 
     try {
-      await saveCustomers(nextCustomers);
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.id === selectedCustomer?.id,
+      );
+      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
     } catch (error) {
       console.error("Failed saving participant after eye exam update", error);
     }
@@ -957,8 +972,13 @@ export default function Participants() {
 
     setCustomers(nextCustomers);
     try {
+      const updatedCustomer = nextCustomers.find(
+        (c) => c.id === selectedCustomer?.id,
+      );
       await Promise.all([
-        saveCustomers(nextCustomers),
+        updatedCustomer
+          ? saveCustomerToFirebase(updatedCustomer)
+          : Promise.resolve(),
         deleteEventFromFirebase(eventId),
       ]);
     } catch (error) {

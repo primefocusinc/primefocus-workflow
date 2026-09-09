@@ -813,20 +813,18 @@ export async function saveRegistrationCustomer(
   await saveCustomerToFirebase(customer);
 }
 
-async function saveCustomerToFirebase(
+export async function saveCustomerToFirebase(
   customer: CustomerRecord,
   fallbackDocumentId?: string,
 ): Promise<void> {
   const normalizedEmail = customer.Email?.trim().toLowerCase();
-  const documentId = customer.id || normalizedEmail || fallbackDocumentId;
+  const documentId = customer.id || fallbackDocumentId;
 
   if (!documentId) {
-    throw new Error(
-      "A participant email or id is required before saving to Firestore.",
-    );
+    throw new Error("A participant id is required before saving to Firestore.");
   }
 
-  const participantId = customer.id ?? documentId;
+  const participantId = documentId;
   const { Events, ...customerWithoutEvents } = customer;
   const payload = toSerializable({
     ...customerWithoutEvents,
@@ -873,15 +871,24 @@ export async function deleteCustomerById(participantId: string): Promise<void> {
     return;
   }
 
-  const customers = await getCustomers();
-  const nextCustomers = customers.filter(
-    (customer) => customer.id !== normalizedParticipantId,
-  );
-
-  await saveCustomers(nextCustomers);
-
   try {
-    await deleteDoc(doc(db, "participants", normalizedParticipantId));
+    // The Firestore document key may differ from the id field stored inside the
+    // document (older records were keyed by email). Query to find the real ref.
+    const participantsSnapshot = await getDocs(
+      query(
+        collection(db, "participants"),
+        where("id", "==", normalizedParticipantId),
+      ),
+    );
+
+    // Also try a direct lookup in case the document key matches the id.
+    const directRef = doc(db, "participants", normalizedParticipantId);
+
+    const refsToDelete = participantsSnapshot.empty
+      ? [directRef]
+      : participantsSnapshot.docs.map((d) => d.ref);
+
+    await Promise.all(refsToDelete.map((ref) => deleteDoc(ref)));
 
     // Delete all events and their station statuses for this participant
     const eventsSnapshot = await getDocs(
@@ -903,10 +910,8 @@ export async function deleteCustomerById(participantId: string): Promise<void> {
       }),
     );
   } catch (error) {
-    console.warn(
-      "Unable to delete participant from Firestore; local storage was updated instead.",
-      error,
-    );
+    console.error("Unable to delete participant from Firestore.", error);
+    throw error;
   }
 }
 

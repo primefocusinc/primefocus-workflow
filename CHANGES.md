@@ -50,3 +50,35 @@ The events filter dropdown on the Participants page was showing a large number o
 ### Notes for future events
 
 When a new `registrationEvents` catalog entry is created, existing participant records created under a different name will not automatically match it via the legacy map. If event names are ever changed in the catalog after participants have already registered, add the old name and new catalog ID to `LEGACY_EVENT_NAME_TO_ID` in `DataControl.ts` to maintain filter compatibility.
+
+---
+
+## 2026-09-09 — Participant Delete Fix
+
+### Problem
+
+Deleting a participant from the Participants page appeared to work (the confirmation dialog fired and the participant disappeared from the list) but the record reappeared within a second on every attempt.
+
+#### Root causes
+
+1. **Wrong Firestore document key** — Older participant records were saved to Firestore using the participant's email address as the document key, not the `participant-{name}-{timestamp}` ID stored in the `id` field inside the document. `deleteCustomerById` was constructing the delete reference from the `id` field value, which pointed to a non-existent document. Firestore silently succeeds when deleting a non-existent document, so no error was raised.
+
+2. **Bulk re-save race condition** — Every station update, event update, and event delete called `saveCustomers(nextCustomers)`, which re-wrote all participants to Firestore. Any of these calls in-flight at the time of a delete would re-create the deleted participant.
+
+3. **Email used as document ID fallback** — `saveCustomerToFirebase` fell back to using the participant's email as the Firestore document key when no `id` was present, perpetuating the mismatch for any new records saved without an `id`.
+
+### Changes
+
+#### `src/DataControl.ts`
+
+- `deleteCustomerById` now queries Firestore for documents where the `id` field matches the participant ID, then deletes the actual document reference(s) found. Falls back to a direct key lookup if no match is found via query. This handles both old email-keyed records and new ID-keyed records.
+- `saveCustomerToFirebase` no longer falls back to email as the Firestore document key. A missing `id` now throws an error rather than silently using the email.
+- `saveCustomerToFirebase` is now exported so individual saves can be called directly.
+
+#### `src/pages/Participants.tsx`
+
+- All calls to `saveCustomers(nextCustomers)` (which re-wrote every participant on every small change) replaced with targeted `saveCustomerToFirebase(updatedCustomer)` calls that only write the affected participant. The one exception is `handleAddEventToAll`, which intentionally saves all participants in parallel.
+
+### Notes
+
+Old participant records in Firestore keyed by email will be deleted correctly by the query-based approach. However, they will continue to exist under their email key until deleted — no migration is needed, but be aware that the Firestore `participants` collection may contain a mix of email-keyed and ID-keyed documents until old records are cleaned up.
