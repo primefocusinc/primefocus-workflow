@@ -264,19 +264,24 @@ export default function Participants() {
   useEffect(() => {
     async function loadData() {
       const data = await getCustomers();
-      setCustomers(data);
+      // Filter out any participants deleted in this session so that a
+      // navigation-triggered reload cannot restore a just-deleted record.
+      const filtered = data.filter(
+        (c) => !deletedParticipantIds.current.has(c.id ?? ""),
+      );
+      setCustomers(filtered);
       const customerKeyParam = params.email?.trim() ?? "";
       const eventIdParam = searchParams.get("eventId")?.trim() ?? "";
       const customerWithEvent = eventIdParam
-        ? data.find((customer) =>
+        ? filtered.find((customer) =>
             customer.Events?.some((event) => event.id === eventIdParam),
           )
         : undefined;
 
       if (customerKeyParam) {
         const match =
-          data.find((customer) => customer.id === customerKeyParam) ??
-          data.find(
+          filtered.find((customer) => customer.id === customerKeyParam) ??
+          filtered.find(
             (customer) =>
               customer.Email?.toLowerCase() === customerKeyParam.toLowerCase(),
           );
@@ -298,9 +303,9 @@ export default function Participants() {
         setSelectedCustomerId(customerWithEvent.id ?? "");
         setFormData(customerWithEvent);
         setExpandedEventId(eventIdParam);
-      } else if (data[0]) {
-        setSelectedCustomerId(data[0].id ?? "");
-        setFormData(data[0]);
+      } else if (filtered[0]) {
+        setSelectedCustomerId(filtered[0].id ?? "");
+        setFormData(filtered[0]);
       }
       setLoading(false);
     }
@@ -545,17 +550,22 @@ export default function Participants() {
 
     try {
       await deleteCustomerById(selectedCustomer.id);
-      const remainingCustomers = customers.filter(
-        (c) => c.id !== selectedCustomer.id,
-      );
-      setCustomers(remainingCustomers);
-      setSelectedCustomerId(remainingCustomers[0]?.id ?? "");
-      setFormData(remainingCustomers[0] ?? {});
+      // Update state directly without navigating. Navigation would change
+      // params.email and re-trigger loadData, which could overwrite our
+      // optimistic removal before the Firestore delete has propagated.
+      let next: typeof customers[0] | undefined;
+      setCustomers((current) => {
+        const remaining = current.filter((c) => c.id !== selectedCustomer.id);
+        next = remaining[0];
+        return remaining;
+      });
+      // next is set synchronously by the updater callback above.
+      setSelectedCustomerId(next?.id ?? "");
+      setFormData(next ?? {});
       setParticipantProfile(
-        remainingCustomers[0]?.participant ?? createDefaultParticipantProfile(),
+        next?.participant ?? createDefaultParticipantProfile(),
       );
       setEditing(false);
-      navigate("/participants");
     } catch (error) {
       // Undo the deletion mark so subsequent saves are not incorrectly blocked.
       deletedParticipantIds.current.delete(selectedCustomer.id);
