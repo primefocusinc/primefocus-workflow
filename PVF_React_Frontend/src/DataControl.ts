@@ -34,6 +34,13 @@ export interface EventRecord {
   status: "planned" | "active" | "completed";
   stationStatuses: StationStatus[];
   registrationEventId?: string; // ID of the RegistrationEventOption catalog entry
+  /**
+   * The actual Firestore document key this event was loaded from. Legacy
+   * documents may be keyed differently from the `id` field stored inside the
+   * document, so saves must target this key (when present) to avoid creating
+   * a duplicate document under the `id` key. Not persisted.
+   */
+  firestoreDocId?: string;
 }
 
 export interface RegistrationEventOption {
@@ -541,6 +548,7 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
       const event: EventRecord = {
         ...data,
         id: data.id ?? eventDoc.id,
+        firestoreDocId: eventDoc.id,
         stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? [],
       };
       if (!eventsByParticipant[participantId]) {
@@ -899,14 +907,34 @@ export async function deleteCustomerById(participantId: string): Promise<void> {
 
 export async function deleteEventFromFirebase(eventId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, "events", eventId));
+    // The Firestore document key may differ from the id field stored inside
+    // the document (legacy records). Query for the real refs and fall back to
+    // a direct lookup when the query finds nothing.
+    const eventsSnapshot = await getDocs(
+      query(collection(db, "events"), where("id", "==", eventId)),
+    );
+    const refsToDelete = eventsSnapshot.empty
+      ? [doc(db, "events", eventId)]
+      : eventsSnapshot.docs.map((d) => d.ref);
+    await Promise.all(refsToDelete.map((ref) => deleteDoc(ref)));
+
+    // Station status docs are keyed by the event's id field; also cover any
+    // legacy docs keyed by a mismatched event document key (deleting a
+    // nonexistent doc is a no-op).
+    const stationKeyPrefixes = new Set<string>([
+      eventId,
+      ...eventsSnapshot.docs.map((d) => d.id),
+    ]);
     await Promise.all(
-      STATION_IDS.map((stationId) =>
-        deleteDoc(doc(db, "stationStatuses", `${eventId}_${stationId}`)),
+      Array.from(stationKeyPrefixes).flatMap((prefix) =>
+        STATION_IDS.map((stationId) =>
+          deleteDoc(doc(db, "stationStatuses", `${prefix}_${stationId}`)),
+        ),
       ),
     );
   } catch (error) {
-    console.warn("Unable to delete event from Firestore.", error);
+    console.error("Unable to delete event from Firestore.", error);
+    throw error;
   }
 }
 
@@ -914,16 +942,21 @@ async function saveEventDocToFirebase(
   event: EventRecord,
   participantId: string,
 ): Promise<void> {
-  const { stationStatuses, ...eventFields } = event;
+  const { stationStatuses, firestoreDocId: _firestoreDocId, ...eventFields } =
+    event;
   const eventPayload = toSerializable({
     ...eventFields,
     participantId,
     stationStatuses: sortStationStatuses(stationStatuses),
   }) as Record<string, unknown>;
+  // Write back to the document key the event was loaded from; legacy documents
+  // may be keyed differently from the `id` field, and writing to the id key
+  // for those would create a duplicate document.
+  const documentId = event.firestoreDocId || event.id;
   try {
-    await setDoc(doc(db, "events", event.id), eventPayload);
+    await setDoc(doc(db, "events", documentId), eventPayload);
   } catch (error) {
-    console.error(`Failed to write event ${event.id} to Firestore:`, error);
+    console.error(`Failed to write event ${documentId} to Firestore:`, error);
     throw new Error(
       `Failed to save event record: ${error instanceof Error ? error.message : String(error)}`,
     );

@@ -63,3 +63,35 @@ data-integrity, and maintainability concerns.
       when no event ID is provided, one asserting it propagates correctly when supplied.
       Filter fallback is a pure UI concern (no pure-function test surface); query-based
       delete is a Firestore integration concern outside unit test scope.
+
+## Second-pass review follow-ups
+
+Gaps found while re-verifying the items above; all fixed.
+
+- [x] **Pending event saves could resurrect a deleted participant.** Debounced and queued
+      event saves ignored `deletedParticipantIds`. Fixed: `handleDeleteParticipant` cancels
+      pending debounced saves for the participant's events, awaits their in-flight queues,
+      and marks every ID identifying the participant (record id plus each event's
+      `participantId`); `enqueueEventSave` skips saves for marked IDs both at enqueue time
+      and again when the queued save runs.
+- [x] **Unmount flush bypassed the per-event queue.** The flush called
+      `saveParticipantEvent` directly, so an older in-flight write could clobber it.
+      Fixed: the flush now goes through `enqueueEventSave` (which also applies the
+      deleted-participant guard).
+- [x] **Backfill could permanently lock in the wrong catalog ID.** The rename backfill in
+      `updateEvent` ran per keystroke with exact, untrimmed, case-sensitive matching —
+      typing toward "Spring Fair" through "Spring" locked in the wrong ID. Fixed: matching
+      is trimmed/case-insensitive, and session backfills are provisional (tracked in
+      `sessionBackfilledEventIds` and re-derived or cleared on each name change). The
+      name-based filter fallback now uses the same trimmed/case-insensitive comparison.
+- [x] **Event saves/deletes assumed doc key == `event.id`.** Same legacy-key bug class as
+      the participant fix. Fixed: events now carry `firestoreDocId` on load,
+      `saveEventDocToFirebase` writes back to it (stripped from the payload), and
+      `deleteEventFromFirebase` queries by the `id` field with a direct-ref fallback,
+      covering station-status docs under both key prefixes.
+- [x] **`deleteEventFromFirebase` swallowed errors.** Failures were logged with
+      `console.warn` and never propagated, so `handleDeleteEvent`'s error banner could not
+      fire. Fixed: errors are rethrown.
+- [x] **Duplicate React keys possible for legacy duplicate documents.** Pre-existing
+      email-keyed + id-keyed duplicates share `customer.id`. Fixed: the participant list
+      keys by `customer.firestoreDocId ?? customer.id` (document keys are unique).

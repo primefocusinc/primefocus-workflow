@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -200,23 +200,44 @@ export default function Participants() {
   const pendingEventSaves = useRef<Map<string, EventRecord>>(new Map());
   const eventSaveTimers = useRef<Map<string, number>>(new Map());
   // Track participant IDs deleted in this session so that any in-flight
-  // saveCustomerToFirebase call can skip the write and avoid resurrecting a
-  // deleted document (setDoc with merge:true recreates missing docs).
+  // saveCustomerToFirebase call or queued/debounced event save can skip the
+  // write and avoid resurrecting deleted documents (setDoc recreates missing
+  // docs).
   const deletedParticipantIds = useRef<Set<string>>(new Set());
+  // Events whose registrationEventId was backfilled from a name match during
+  // this session. While the user is still editing the name, the backfill is
+  // provisional and gets re-derived on each change instead of locking in the
+  // first match (e.g. typing toward "Spring Fair" passing through "Spring").
+  const sessionBackfilledEventIds = useRef<Set<string>>(new Set());
 
-  const enqueueEventSave = (eventRecord: EventRecord): Promise<void> => {
-    const previous =
-      eventSaveQueues.current.get(eventRecord.id) ?? Promise.resolve();
-    const next = previous
-      .catch(() => {})
-      .then(() => saveParticipantEvent(eventRecord))
-      .catch((error) => {
-        console.error(`Failed saving event ${eventRecord.id}`, error);
-        setSaveError("Event changes could not be saved. Please try again.");
-      });
-    eventSaveQueues.current.set(eventRecord.id, next);
-    return next;
-  };
+  const enqueueEventSave = useCallback(
+    (eventRecord: EventRecord): Promise<void> => {
+      // Skip saves for participants deleted this session so a queued or
+      // debounced event save cannot recreate event/stationStatus documents
+      // for a deleted participant.
+      if (deletedParticipantIds.current.has(eventRecord.participantId)) {
+        return Promise.resolve();
+      }
+
+      const previous =
+        eventSaveQueues.current.get(eventRecord.id) ?? Promise.resolve();
+      const next = previous
+        .catch(() => {})
+        .then(() => {
+          if (deletedParticipantIds.current.has(eventRecord.participantId)) {
+            return;
+          }
+          return saveParticipantEvent(eventRecord);
+        })
+        .catch((error) => {
+          console.error(`Failed saving event ${eventRecord.id}`, error);
+          setSaveError("Event changes could not be saved. Please try again.");
+        });
+      eventSaveQueues.current.set(eventRecord.id, next);
+      return next;
+    },
+    [],
+  );
 
   const cancelScheduledEventSave = (eventId: string) => {
     const timer = eventSaveTimers.current.get(eventId);
@@ -247,6 +268,9 @@ export default function Participants() {
   };
 
   // Flush pending debounced saves when leaving the page so edits are not lost.
+  // The flush goes through the per-event queue so it cannot race (and be
+  // clobbered by) an older in-flight save for the same event, and so it
+  // respects the deleted-participant guard.
   useEffect(() => {
     const timers = eventSaveTimers.current;
     const pending = pendingEventSaves.current;
@@ -255,13 +279,11 @@ export default function Participants() {
       timers.forEach((timer) => window.clearTimeout(timer));
       timers.clear();
       pending.forEach((eventRecord) => {
-        void saveParticipantEvent(eventRecord).catch((error) => {
-          console.error(`Failed saving event ${eventRecord.id}`, error);
-        });
+        void enqueueEventSave(eventRecord);
       });
       pending.clear();
     };
-  }, []);
+  }, [enqueueEventSave]);
 
   useEffect(() => {
     async function loadData() {
@@ -397,12 +419,15 @@ export default function Participants() {
 
     // Resolve the catalog event name for the selected filter so we can match
     // participant EventRecords by name (participant event IDs are unique per
-    // submission and never match catalog IDs directly).
+    // submission and never match catalog IDs directly). Compared trimmed and
+    // case-insensitively, matching the backfill logic in updateEvent.
     const selectedCatalogEventName =
       participantEventFilterId === "all"
         ? null
-        : (registrationEvents.find((e) => e.id === participantEventFilterId)
-            ?.eventName ?? null);
+        : (registrationEvents
+            .find((e) => e.id === participantEventFilterId)
+            ?.eventName.trim()
+            .toLowerCase() ?? null);
 
     return customers.filter((customer) => {
       const fullName =
@@ -420,7 +445,9 @@ export default function Participants() {
           (event) =>
             event.registrationEventId === participantEventFilterId ||
             (!event.registrationEventId &&
-              event.eventName === selectedCatalogEventName),
+              selectedCatalogEventName !== null &&
+              event.eventName.trim().toLowerCase() ===
+                selectedCatalogEventName),
         );
 
       return matchesSearch && matchesEvent;
@@ -551,7 +578,28 @@ export default function Participants() {
 
     // Mark as deleted immediately so any in-flight saveCustomerToFirebase call
     // (e.g. from handleSave) skips its write rather than recreating the doc.
-    deletedParticipantIds.current.add(selectedCustomer.id);
+    // Events may carry a different participantId (participant profile id or
+    // email), so mark those too — enqueueEventSave checks this set.
+    const relatedParticipantIds = new Set<string>([selectedCustomer.id]);
+    const participantEventRecords = selectedCustomer.Events ?? [];
+    participantEventRecords.forEach((event) => {
+      if (event.participantId) {
+        relatedParticipantIds.add(event.participantId);
+      }
+    });
+    relatedParticipantIds.forEach((id) =>
+      deletedParticipantIds.current.add(id),
+    );
+    // Drop pending debounced event saves and wait for in-flight event saves to
+    // settle so a late write cannot recreate the documents we are deleting.
+    participantEventRecords.forEach((event) =>
+      cancelScheduledEventSave(event.id),
+    );
+    await Promise.all(
+      participantEventRecords.map(
+        (event) => eventSaveQueues.current.get(event.id) ?? Promise.resolve(),
+      ),
+    );
 
     try {
       await deleteCustomerById(selectedCustomer.id);
@@ -572,8 +620,10 @@ export default function Participants() {
       );
       setEditing(false);
     } catch (error) {
-      // Undo the deletion mark so subsequent saves are not incorrectly blocked.
-      deletedParticipantIds.current.delete(selectedCustomer.id);
+      // Undo the deletion marks so subsequent saves are not incorrectly blocked.
+      relatedParticipantIds.forEach((id) =>
+        deletedParticipantIds.current.delete(id),
+      );
       console.error("Failed deleting participant", error);
     }
   };
@@ -752,20 +802,41 @@ export default function Participants() {
           // If this is a legacy event (no registrationEventId) and the name is
           // being changed to match a known catalog event, backfill
           // registrationEventId so future filter lookups use the stable ID path
-          // rather than the fragile name-match fallback.
+          // rather than the fragile name-match fallback. Backfills made during
+          // this session stay provisional: they are re-derived on every name
+          // change (and cleared if the name no longer matches) so that typing
+          // through an intermediate match (e.g. "Spring" on the way to
+          // "Spring Fair") cannot permanently lock in the wrong catalog ID.
           const incomingName =
             "eventName" in eventUpdates ? eventUpdates.eventName : undefined;
-          const backfillId =
-            !event.registrationEventId && incomingName !== undefined
-              ? (registrationEvents.find(
-                  (re) => re.eventName === incomingName,
-                )?.id ?? undefined)
+          let backfillUpdates: Partial<EventRecord> = {};
+          if (
+            incomingName !== undefined &&
+            (!event.registrationEventId ||
+              sessionBackfilledEventIds.current.has(event.id))
+          ) {
+            const normalizedIncoming = (incomingName ?? "")
+              .trim()
+              .toLowerCase();
+            const catalogMatch = normalizedIncoming
+              ? registrationEvents.find(
+                  (re) =>
+                    re.eventName.trim().toLowerCase() === normalizedIncoming,
+                )
               : undefined;
+            if (catalogMatch?.id) {
+              backfillUpdates = { registrationEventId: catalogMatch.id };
+              sessionBackfilledEventIds.current.add(event.id);
+            } else if (sessionBackfilledEventIds.current.has(event.id)) {
+              backfillUpdates = { registrationEventId: undefined };
+              sessionBackfilledEventIds.current.delete(event.id);
+            }
+          }
 
           updatedEvent = {
             ...event,
             ...eventUpdates,
-            ...(backfillId ? { registrationEventId: backfillId } : {}),
+            ...backfillUpdates,
             stationStatuses: sortStationStatuses(
               (eventUpdates.stationStatuses ??
                 event.stationStatuses) as StationStatus[],
@@ -1100,6 +1171,7 @@ export default function Participants() {
     // Drop any pending debounced save so it cannot re-create the event, then
     // wait for in-flight saves for this event to settle before deleting.
     cancelScheduledEventSave(eventId);
+    sessionBackfilledEventIds.current.delete(eventId);
     try {
       await eventSaveQueues.current.get(eventId);
       eventSaveQueues.current.delete(eventId);
@@ -1770,7 +1842,9 @@ export default function Participants() {
               const email = customer.Email ?? "";
               return (
                 <button
-                  key={customer.id}
+                  // firestoreDocId is the Firestore document key, which is
+                  // unique even if legacy duplicate documents share an id.
+                  key={customer.firestoreDocId ?? customer.id}
                   onClick={() => handleSelect(customer)}
                   className={`w-full text-left rounded-md border px-3 py-2 ${customer.id && customer.id === selectedCustomerId ? "bg-blue-50 border-blue-400" : "bg-white hover:bg-gray-50"}`}
                 >
