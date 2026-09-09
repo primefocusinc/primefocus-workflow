@@ -16,3 +16,6 @@ primefocus-workflow-*.json
 ### Firebase CLI ###
 firebase-debug.log
 .firebase/
+
+.devenv
+.direnv
