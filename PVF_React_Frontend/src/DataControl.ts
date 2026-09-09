@@ -820,6 +820,16 @@ export async function saveCustomerToFirebase(
   );
 }
 
+export async function saveParticipantEvent(event: EventRecord): Promise<void> {
+  if (!event.participantId) {
+    throw new Error(
+      "An event participantId is required before saving to Firestore.",
+    );
+  }
+
+  await saveEventDocToFirebase(event, event.participantId);
+}
+
 export async function deleteCustomerByEmail(email: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) {

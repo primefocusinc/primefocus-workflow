@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -12,6 +12,7 @@ import {
   getCustomers,
   getRegistrationEvents,
   saveCustomerToFirebase,
+  saveParticipantEvent,
   type CustomerRecord,
   type EventRecord,
   type ParticipantProfile,
@@ -139,6 +140,8 @@ const referralSources = [
   "Other",
 ];
 
+const EVENT_SAVE_DEBOUNCE_MS = 600;
+
 function sortEventsByRecency(left: EventRecord, right: EventRecord): number {
   const leftTime = Date.parse(left.createdAt || left.eventDate || "1970-01-01");
   const rightTime = Date.parse(
@@ -187,6 +190,72 @@ export default function Participants() {
   const params = useParams();
   const [searchParams] = useSearchParams();
   const { user, role } = useAuth();
+
+  // Event saves are serialized per event so parallel setDoc calls cannot
+  // complete out of order (an earlier slow write clobbering a later one).
+  const eventSaveQueues = useRef<Map<string, Promise<void>>>(new Map());
+  // Debounced saves for free-text inputs (event name/date) so we do not write
+  // to Firestore on every keystroke.
+  const pendingEventSaves = useRef<Map<string, EventRecord>>(new Map());
+  const eventSaveTimers = useRef<Map<string, number>>(new Map());
+
+  const enqueueEventSave = (eventRecord: EventRecord): Promise<void> => {
+    const previous =
+      eventSaveQueues.current.get(eventRecord.id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => saveParticipantEvent(eventRecord))
+      .catch((error) => {
+        console.error(`Failed saving event ${eventRecord.id}`, error);
+      });
+    eventSaveQueues.current.set(eventRecord.id, next);
+    return next;
+  };
+
+  const cancelScheduledEventSave = (eventId: string) => {
+    const timer = eventSaveTimers.current.get(eventId);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      eventSaveTimers.current.delete(eventId);
+    }
+    pendingEventSaves.current.delete(eventId);
+  };
+
+  const scheduleEventSave = (eventRecord: EventRecord) => {
+    pendingEventSaves.current.set(eventRecord.id, eventRecord);
+    const timer = eventSaveTimers.current.get(eventRecord.id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+    }
+    eventSaveTimers.current.set(
+      eventRecord.id,
+      window.setTimeout(() => {
+        eventSaveTimers.current.delete(eventRecord.id);
+        const pending = pendingEventSaves.current.get(eventRecord.id);
+        pendingEventSaves.current.delete(eventRecord.id);
+        if (pending) {
+          void enqueueEventSave(pending);
+        }
+      }, EVENT_SAVE_DEBOUNCE_MS),
+    );
+  };
+
+  // Flush pending debounced saves when leaving the page so edits are not lost.
+  useEffect(() => {
+    const timers = eventSaveTimers.current;
+    const pending = pendingEventSaves.current;
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers.clear();
+      pending.forEach((eventRecord) => {
+        void saveParticipantEvent(eventRecord).catch((error) => {
+          console.error(`Failed saving event ${eventRecord.id}`, error);
+        });
+      });
+      pending.clear();
+    };
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -577,14 +646,9 @@ export default function Participants() {
     });
 
     setCustomers(nextCustomers);
-    try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.Email?.toLowerCase() === selectedCustomer.Email?.toLowerCase(),
-      );
-      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
-    } catch (error) {
-      console.error("Failed saving participant after adding event", error);
-    }
+    // Adding an event only creates an event document; the participant document
+    // is unchanged, so save just the new event.
+    await enqueueEventSave(newEvent);
   };
 
   const handleAddEventToAll = async () => {
@@ -605,6 +669,7 @@ export default function Participants() {
       selectedRegistrationEvent.id,
     );
     setExpandedEventId(selectedCustomerEvent.id);
+    const createdEvents: EventRecord[] = [];
     const nextCustomers = customers.map((customer) => {
       if (!customer.Email) {
         return customer;
@@ -615,15 +680,14 @@ export default function Participants() {
       const newEvent =
         customer.Email.toLowerCase() === selectedCustomer?.Email?.toLowerCase()
           ? selectedCustomerEvent
-          : (() => {
-              return buildNewEvent(
-                participantId,
-                customer.Email,
-                selectedRegistrationEvent.eventName,
-                selectedRegistrationEvent.eventDate,
-                selectedRegistrationEvent.id,
-              );
-            })();
+          : buildNewEvent(
+              participantId,
+              customer.Email,
+              selectedRegistrationEvent.eventName,
+              selectedRegistrationEvent.eventDate,
+              selectedRegistrationEvent.id,
+            );
+      createdEvents.push(newEvent);
 
       return {
         ...customer,
@@ -632,59 +696,17 @@ export default function Participants() {
     });
 
     setCustomers(nextCustomers);
-    try {
-      await Promise.all(nextCustomers.map((c) => saveCustomerToFirebase(c)));
-    } catch (error) {
-      console.error(
-        "Failed saving participants when adding event to all",
-        error,
-      );
-    }
+    // Only the new event documents need to be written; the participant
+    // documents themselves are unchanged.
+    await Promise.all(createdEvents.map((event) => enqueueEventSave(event)));
   };
 
   const updateEvent = async (
     eventId: string,
     eventUpdates: Partial<EventRecord>,
+    options?: { debounce?: boolean },
   ) => {
-    const nextCustomers = customers.map((customer) => {
-      if (customer.id !== selectedCustomer?.id) {
-        return customer;
-      }
-
-      return {
-        ...customer,
-        Events: (customer.Events ?? []).map((event) =>
-          event.id === eventId
-            ? {
-                ...event,
-                ...eventUpdates,
-                stationStatuses: sortStationStatuses(
-                  (eventUpdates.stationStatuses ??
-                    event.stationStatuses) as StationStatus[],
-                ),
-              }
-            : event,
-        ),
-      };
-    });
-
-    setCustomers(nextCustomers);
-
-    try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.id === selectedCustomer?.id,
-      );
-      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
-    } catch (error) {
-      console.error("Failed saving participant after event update", error);
-    }
-  };
-
-  const updateEventStation = async (
-    eventId: string,
-    stationId: string,
-    stationUpdates: Partial<StationStatus>,
-  ) => {
+    let updatedEvent: EventRecord | undefined;
     const nextCustomers = customers.map((customer) => {
       if (customer.id !== selectedCustomer?.id) {
         return customer;
@@ -697,7 +719,55 @@ export default function Participants() {
             return event;
           }
 
-          return {
+          updatedEvent = {
+            ...event,
+            ...eventUpdates,
+            stationStatuses: sortStationStatuses(
+              (eventUpdates.stationStatuses ??
+                event.stationStatuses) as StationStatus[],
+            ),
+          };
+          return updatedEvent;
+        }),
+      };
+    });
+
+    setCustomers(nextCustomers);
+
+    if (!updatedEvent) {
+      return;
+    }
+
+    if (options?.debounce) {
+      scheduleEventSave(updatedEvent);
+      return;
+    }
+
+    // The immediate save is built from the latest state, so it already
+    // includes any pending debounced edits for this event.
+    cancelScheduledEventSave(eventId);
+    await enqueueEventSave(updatedEvent);
+  };
+
+  const updateEventStation = async (
+    eventId: string,
+    stationId: string,
+    stationUpdates: Partial<StationStatus>,
+  ) => {
+    let updatedEvent: EventRecord | undefined;
+    const nextCustomers = customers.map((customer) => {
+      if (customer.id !== selectedCustomer?.id) {
+        return customer;
+      }
+
+      return {
+        ...customer,
+        Events: (customer.Events ?? []).map((event) => {
+          if (event.id !== eventId) {
+            return event;
+          }
+
+          updatedEvent = {
             ...event,
             stationStatuses: sortStationStatuses(
               event.stationStatuses.map((station) =>
@@ -707,19 +777,16 @@ export default function Participants() {
               ),
             ),
           };
+          return updatedEvent;
         }),
       };
     });
 
     setCustomers(nextCustomers);
 
-    try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.id === selectedCustomer?.id,
-      );
-      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
-    } catch (error) {
-      console.error("Failed saving participant after station update", error);
+    if (updatedEvent) {
+      cancelScheduledEventSave(eventId);
+      await enqueueEventSave(updatedEvent);
     }
   };
 
@@ -727,6 +794,7 @@ export default function Participants() {
     eventId: string,
     decision: StationDecision,
   ) => {
+    let updatedEvent: EventRecord | undefined;
     const nextCustomers = customers.map((customer) => {
       if (customer.id !== selectedCustomer?.id) {
         return customer;
@@ -739,7 +807,7 @@ export default function Participants() {
             return event;
           }
 
-          return {
+          updatedEvent = {
             ...event,
             stationStatuses: sortStationStatuses(
               event.stationStatuses.map((station) => {
@@ -759,19 +827,16 @@ export default function Participants() {
               }),
             ),
           };
+          return updatedEvent;
         }),
       };
     });
 
     setCustomers(nextCustomers);
 
-    try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.id === selectedCustomer?.id,
-      );
-      if (updatedCustomer) await saveCustomerToFirebase(updatedCustomer);
-    } catch (error) {
-      console.error("Failed saving participant after eye exam update", error);
+    if (updatedEvent) {
+      cancelScheduledEventSave(eventId);
+      await enqueueEventSave(updatedEvent);
     }
   };
 
@@ -971,18 +1036,15 @@ export default function Participants() {
     });
 
     setCustomers(nextCustomers);
+    // Drop any pending debounced save so it cannot re-create the event, then
+    // wait for in-flight saves for this event to settle before deleting.
+    cancelScheduledEventSave(eventId);
     try {
-      const updatedCustomer = nextCustomers.find(
-        (c) => c.id === selectedCustomer?.id,
-      );
-      await Promise.all([
-        updatedCustomer
-          ? saveCustomerToFirebase(updatedCustomer)
-          : Promise.resolve(),
-        deleteEventFromFirebase(eventId),
-      ]);
+      await eventSaveQueues.current.get(eventId);
+      eventSaveQueues.current.delete(eventId);
+      await deleteEventFromFirebase(eventId);
     } catch (error) {
-      console.error("Failed saving participant after deleting event", error);
+      console.error("Failed deleting event", error);
     }
   };
 
@@ -2024,9 +2086,11 @@ export default function Participants() {
                                     <input
                                       value={event.eventName}
                                       onChange={(e) =>
-                                        updateEvent(event.id, {
-                                          eventName: e.target.value,
-                                        })
+                                        void updateEvent(
+                                          event.id,
+                                          { eventName: e.target.value },
+                                          { debounce: true },
+                                        )
                                       }
                                       className="w-full rounded border px-3 py-2 text-sm font-semibold text-blue-800 md:min-w-[240px]"
                                     />
@@ -2034,9 +2098,11 @@ export default function Participants() {
                                       type="date"
                                       value={event.eventDate}
                                       onChange={(e) =>
-                                        updateEvent(event.id, {
-                                          eventDate: e.target.value,
-                                        })
+                                        void updateEvent(
+                                          event.id,
+                                          { eventDate: e.target.value },
+                                          { debounce: true },
+                                        )
                                       }
                                       className="rounded border px-3 py-2 text-sm"
                                     />

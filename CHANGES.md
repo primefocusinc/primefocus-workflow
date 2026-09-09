@@ -95,3 +95,25 @@ Old participant records in Firestore keyed by email will be deleted correctly by
 - `CustomerRecord` gained a `firestoreDocId` field, populated at load time with the actual Firestore document key the record came from. It is stripped from the payload before saving.
 - `saveCustomerToFirebase` now writes to `firestoreDocId` when present, falling back to the participant `id` for new records. Edits to legacy email-keyed records therefore update the existing document in place instead of creating a duplicate.
 - A query-before-write lookup was deliberately not used: public registration runs unauthenticated and cannot read the `participants` collection under the security rules.
+
+---
+
+## 2026-09-09 — Targeted, Debounced, and Ordered Event Saves
+
+### Problem
+
+Every event mutation on the Participants page (including each keystroke in the event name/date inputs) called `saveCustomerToFirebase`, rewriting the participant document plus all of its event and station status documents. Parallel `setDoc` calls from successive keystrokes had no ordering guarantee, so an earlier slow write could overwrite a later one.
+
+### Changes
+
+#### `src/DataControl.ts`
+
+- Exported `saveParticipantEvent(event)`, which writes a single event document and its station statuses. Throws if the event has no `participantId`.
+
+#### `src/pages/Participants.tsx`
+
+- `updateEvent`, `updateEventStation`, `updateEyeExamDecision`, `handleAddEvent`, `handleAddEventToAll`, and `handleDeleteEvent` now write only the affected event document(s). The participant document is only rewritten by profile edits (`handleSave`).
+- Event name/date text inputs debounce their save by 600ms; state updates remain immediate.
+- All saves for a given event are serialized through a per-event promise queue, guaranteeing write order.
+- Deleting an event cancels any pending debounced save and waits for in-flight saves for that event to settle before deleting, so a save cannot re-create the deleted event.
+- Pending debounced saves are flushed when the page unmounts so edits are not lost.

@@ -13,13 +13,12 @@ data-integrity, and maintainability concerns.
       A query-before-write approach was rejected because anonymous registration cannot read
       `participants` under the security rules.
 
-- [ ] **Per-keystroke Firestore writes with no ordering guarantee.**
-      `updateEvent` is wired directly to text/date input `onChange`
-      (`PVF_React_Frontend/src/pages/Participants.tsx:2024-2042`). Every keystroke calls
-      `saveCustomerToFirebase`, which rewrites the participant doc plus ALL of its events and
-      station statuses (`DataControl.ts:846-848`). Parallel `setDoc` calls from successive
-      keystrokes can complete out of order (an earlier slow write can clobber a later one).
-      Fix: debounce the save (or save on blur) and/or write only the changed event doc.
+- [x] **Per-keystroke Firestore writes with no ordering guarantee.**
+      Resolved: event mutations now write only the changed event document via
+      `saveParticipantEvent` (instead of rewriting the participant plus all events),
+      the event name/date inputs are debounced (600ms), and all saves for a given event
+      are serialized through a per-event promise queue so writes cannot complete out of
+      order. Pending debounced saves are cancelled on event delete and flushed on unmount.
 
 - [ ] **Delete race condition reduced, not eliminated.**
       Any in-flight `saveCustomerToFirebase` (including `handleAddEventToAll`,
