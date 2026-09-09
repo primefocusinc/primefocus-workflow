@@ -1048,6 +1048,22 @@ export default function Participants() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
+    const eventToDelete = participantEvents.find((e) => e.id === eventId);
+    const participantName =
+      `${selectedCustomer?.["First Name"] ?? ""} ${selectedCustomer?.["Last Name"] ?? ""}`.trim() ||
+      selectedCustomer?.Email ||
+      "this participant";
+    const eventLabel = eventToDelete?.eventName
+      ? `"${eventToDelete.eventName}"`
+      : "this event";
+
+    const confirmed = window.confirm(
+      `Remove ${eventLabel} for ${participantName}?\n\nThis deletes their check-in record, vision screening results, and all other station data for this event. Other participants who attended the same event are not affected.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
     const nextCustomers = customers.map((customer) => {
       if (customer.id !== selectedCustomer?.id) {
         return customer;
@@ -2391,7 +2407,7 @@ export default function Participants() {
                                     onClick={() => handleDeleteEvent(event.id)}
                                     className="rounded border border-red-300 px-3 py-2 text-sm font-medium text-red-700"
                                   >
-                                    Delete event
+                                    Remove participant from event
                                   </button>
                                 </div>
                               </div>
