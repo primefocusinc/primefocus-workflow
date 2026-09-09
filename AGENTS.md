@@ -1,6 +1,7 @@
 # Agent Instructions
 
 ## Stack
+
 - React (Vite/TypeScript) frontend in `PVF_React_Frontend/`.
 - Firebase Authentication for sign-in.
 - Firebase Firestore for data persistence.
@@ -8,6 +9,7 @@
 - No backend server — the frontend talks directly to Firebase services.
 
 ## Build & Test
+
 ```
 cd PVF_React_Frontend && npm ci && npm run build   # frontend build
 ```
@@ -16,6 +18,7 @@ For local development, copy `PVF_React_Frontend/.env.example` to `PVF_React_Fron
 The `VITE_FIREBASE_*` values are public Firebase config values, not secrets.
 
 ## Deployment (GitHub Actions → Firebase Hosting)
+
 - Workflow: `.github/workflows/deploy-firebase-hosting.yml`, manual `workflow_dispatch` only.
 - Trigger with `channel` = `live` to deploy to the live channel, or a preview channel name
   (e.g., `ci-test`) for a temporary preview URL.
@@ -25,28 +28,26 @@ The `VITE_FIREBASE_*` values are public Firebase config values, not secrets.
 - Deploys both Firestore security rules and the hosting build.
 
 ### Required GitHub configuration
+
 - **Secret:** `FIREBASE_SERVICE_ACCOUNT_KEY` — JSON contents of the `github-deploy-sa` key.
 - **Variables:** `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
   `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
 
 ## Firestore Security Rules
+
 - Rules are in `firestore.rules` and deployed with the hosting workflow.
 - Authorization is based on the authenticated user's UID and the `role` field in `users/{uid}`.
 - Admins can manage user roles; admins and doctors can read/write `participants` and `events`.
 - Regular users can only read/write their own `users/{uid}` document.
 
-## Commit Attribution
-AI commits MUST include:
-```
-Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
-```
-
 ## Remotes
+
 - `origin` → `primefocusinc/primefocus-workflow` (no push access from this account)
 - Push branches to this repo directly if you have write access, then create a PR with `gh pr create --repo primefocusinc/primefocus-workflow`.
 - PRs must be merged by the repo owner; this account cannot merge.
 
 ## GCP Access
+
 `gcloud` CLI is available locally. It is useful for GCP resource management (e.g., deleting
 Cloud Run services or Artifact Registry repositories after the migration). If `gcloud` commands
 fail with an `imp` module error, reinstall via `curl https://sdk.cloud.google.com | bash` rather

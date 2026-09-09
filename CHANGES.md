@@ -23,10 +23,7 @@ The events filter dropdown on the Participants page was showing a large number o
 #### `src/DataControl.ts`
 
 - Added optional `registrationEventId?: string` field to the `EventRecord` interface.
-- Added a `LEGACY_EVENT_NAME_TO_ID` map covering the two existing events, used at load time to backfill `registrationEventId` on old Firestore records that predate this change:
-  - `"Vision Day- Sept 12"` → `registration-event-1784561157803`
-  - `"Vision for Success Back to School Kickoff"` → `registration-event-1784561110683`
-- When joining event documents to participants, `registrationEventId` is resolved from the stored value or the legacy map.
+- Old Firestore records that predate this change have no `registrationEventId`; they are matched in the Participants filter by `eventName` instead (see below).
 
 #### `src/registrationModel.ts`
 
@@ -49,7 +46,7 @@ The events filter dropdown on the Participants page was showing a large number o
 
 ### Notes for future events
 
-When a new `registrationEvents` catalog entry is created, existing participant records created under a different name will not automatically match it via the legacy map. If event names are ever changed in the catalog after participants have already registered, add the old name and new catalog ID to `LEGACY_EVENT_NAME_TO_ID` in `DataControl.ts` to maintain filter compatibility.
+Participant event records created before this change have no `registrationEventId` and are matched in the filter by exact `eventName`. If an event name is ever changed in the catalog after participants have already registered, those older records will no longer match the filter for that event.
 
 ---
 

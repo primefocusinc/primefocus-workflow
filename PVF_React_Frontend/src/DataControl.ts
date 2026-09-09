@@ -506,14 +506,6 @@ function sortRegistrationEventOptions(
   return rightTime - leftTime;
 }
 
-// Maps legacy eventName values (from before registrationEventId was stored) to
-// their catalog IDs. Add entries here whenever old data needs to be recognized.
-const LEGACY_EVENT_NAME_TO_ID: Record<string, string> = {
-  "Vision Day- Sept 12": "registration-event-1784561157803",
-  "Vision for Success Back to School Kickoff":
-    "registration-event-1784561110683",
-};
-
 async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
   try {
     const [participantsSnapshot, eventsSnapshot, stationStatusesSnapshot] =
@@ -539,14 +531,10 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
     for (const eventDoc of eventsSnapshot.docs) {
       const data = eventDoc.data() as EventRecord;
       const participantId = data.participantId;
-      const resolvedRegistrationEventId =
-        data.registrationEventId ||
-        (data.eventName ? LEGACY_EVENT_NAME_TO_ID[data.eventName] : undefined);
       const event: EventRecord = {
         ...data,
         id: data.id ?? eventDoc.id,
         stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? [],
-        registrationEventId: resolvedRegistrationEventId,
       };
       if (!eventsByParticipant[participantId]) {
         eventsByParticipant[participantId] = [];
@@ -777,34 +765,6 @@ export async function getDashboardStats(
     referralOut,
     rxFrameSelected,
   };
-}
-
-export async function saveCustomers(
-  customers: CustomerRecord[],
-): Promise<void> {
-  await Promise.all(
-    customers.map((customer, index) => {
-      const normalizedEmail = customer.Email?.trim().toLowerCase();
-      const documentId = customer.id || normalizedEmail || `customer-${index}`;
-      const participantId = customer.id ?? documentId;
-      const { Events, ...customerWithoutEvents } = customer;
-      const payload = toSerializable({
-        ...customerWithoutEvents,
-        Email: normalizedEmail ?? customer.Email,
-      }) as Record<string, unknown>;
-      const saveParticipant = setDoc(
-        doc(db, "participants", documentId),
-        payload,
-        { merge: true },
-      );
-      const saveEvents = Promise.all(
-        (Events ?? []).map((event) =>
-          saveEventDocToFirebase(event, participantId),
-        ),
-      );
-      return Promise.all([saveParticipant, saveEvents]);
-    }),
-  );
 }
 
 export async function saveRegistrationCustomer(
