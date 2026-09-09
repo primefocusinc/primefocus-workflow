@@ -143,6 +143,13 @@ export interface CustomerRecord {
   Email?: string;
   Events?: EventRecord[];
   participant?: ParticipantProfile;
+  /**
+   * The actual Firestore document key this record was loaded from. Older
+   * records were keyed by email while newer ones are keyed by the `id` field,
+   * so the two can differ. Saves must target this key (when present) to avoid
+   * creating a duplicate document under the `id` key. Not persisted.
+   */
+  firestoreDocId?: string;
 }
 
 export interface DashboardStats {
@@ -552,6 +559,7 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
       return {
         ...(data as CustomerRecord),
         id: participantId,
+        firestoreDocId: docSnapshot.id,
         Email: normalizedEmail,
         participant: data.participant
           ? data.participant
@@ -778,14 +786,18 @@ export async function saveCustomerToFirebase(
   fallbackDocumentId?: string,
 ): Promise<void> {
   const normalizedEmail = customer.Email?.trim().toLowerCase();
-  const documentId = customer.id || fallbackDocumentId;
+  const participantId = customer.id || fallbackDocumentId;
 
-  if (!documentId) {
+  if (!participantId) {
     throw new Error("A participant id is required before saving to Firestore.");
   }
 
-  const participantId = documentId;
-  const { Events, ...customerWithoutEvents } = customer;
+  // Write back to the document key the record was loaded from. Older records
+  // are keyed by email rather than the participant id; writing to the id key
+  // for those would create a duplicate document.
+  const documentId = customer.firestoreDocId || participantId;
+  const { Events, firestoreDocId: _firestoreDocId, ...customerWithoutEvents } =
+    customer;
   const payload = toSerializable({
     ...customerWithoutEvents,
     Email: normalizedEmail ?? customer.Email,

@@ -6,16 +6,12 @@ data-integrity, and maintainability concerns.
 
 ## High priority
 
-- [ ] **Editing an old email-keyed participant creates a duplicate Firestore document.**
-      Legacy docs are keyed by email but contain a `participant-...` value in the `id` field.
-      `saveCustomerToFirebase` writes to `doc(db, "participants", customer.id)`
-      (`PVF_React_Frontend/src/DataControl.ts:821,835`), so the first edit/station update on a
-      legacy participant creates a second doc under the ID key while the email-keyed doc remains.
-      Both then load as duplicate list entries with the same `id`. CHANGES.md's "no migration is
-      needed" claim is misleading — duplicates accumulate until the participant is deleted
-      (the query-based delete removes both).
-      Fix: reuse the query-by-`id`-field lookup from `deleteCustomerById` inside
-      `saveCustomerToFirebase`, or run a one-time migration to rekey old docs.
+- [x] **Editing an old email-keyed participant creates a duplicate Firestore document.**
+      Resolved: records loaded from Firestore now carry `firestoreDocId` (the actual document
+      key), and `saveCustomerToFirebase` writes back to that key instead of assuming the key
+      equals the `id` field. New records (no `firestoreDocId`) are keyed by `id` as before.
+      A query-before-write approach was rejected because anonymous registration cannot read
+      `participants` under the security rules.
 
 - [ ] **Per-keystroke Firestore writes with no ordering guarantee.**
       `updateEvent` is wired directly to text/date input `onChange`

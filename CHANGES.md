@@ -79,3 +79,19 @@ Deleting a participant from the Participants page appeared to work (the confirma
 ### Notes
 
 Old participant records in Firestore keyed by email will be deleted correctly by the query-based approach. However, they will continue to exist under their email key until deleted — no migration is needed, but be aware that the Firestore `participants` collection may contain a mix of email-keyed and ID-keyed documents until old records are cleaned up.
+
+---
+
+## 2026-09-09 — Save Writes Back to the Original Document Key
+
+### Problem
+
+`saveCustomerToFirebase` always wrote to `participants/{id}`. For old records keyed by email (with a different `participant-...` value in the `id` field), the first edit or station update created a second document under the ID key while the email-keyed document remained, producing duplicate participants on the next load.
+
+### Changes
+
+#### `src/DataControl.ts`
+
+- `CustomerRecord` gained a `firestoreDocId` field, populated at load time with the actual Firestore document key the record came from. It is stripped from the payload before saving.
+- `saveCustomerToFirebase` now writes to `firestoreDocId` when present, falling back to the participant `id` for new records. Edits to legacy email-keyed records therefore update the existing document in place instead of creating a duplicate.
+- A query-before-write lookup was deliberately not used: public registration runs unauthenticated and cannot read the `participants` collection under the security rules.
