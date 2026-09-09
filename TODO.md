@@ -29,14 +29,12 @@ data-integrity, and maintainability concerns.
 
 ## Medium priority
 
-- [ ] **React key remount hack is a band-aid.**
-      The list container is keyed on `participantEventFilterId`
-      (`Participants.tsx:1642`), but item keys still include the array index
-      (`${customerId || email || "unknown"}-${index}`, line 1650). The stale-DOM behavior can
-      recur when the search term changes or participants are added/deleted — those paths get no
-      remount. Since saves now guarantee an `id`, use `key={customer.id}` and drop both the
-      index suffix and the container-key hack (which also resets scroll position on every
-      filter change).
+- [x] **React key remount hack is a band-aid.**
+      Fixed: removed `key={participantEventFilterId}` from the list container `<div>`
+      (scroll position no longer resets on filter change) and changed item keys from
+      `${customerId || email || "unknown"}-${index}` to `key={customer.id}` (stable,
+      index-free identity). Participants always carry an `id` so the fallback chain
+      is no longer needed.
 
 - [ ] **Silent failure on optimistic updates.**
       All Participants.tsx handlers update React state first and only `console.error` on save

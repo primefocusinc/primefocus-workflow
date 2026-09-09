@@ -1715,15 +1715,14 @@ export default function Participants() {
             Showing {filteredCustomers.length} participant
             {filteredCustomers.length === 1 ? "" : "s"}
           </p>
-          <div className="space-y-2" key={participantEventFilterId}>
-            {filteredCustomers.map((customer, index) => {
+          <div className="space-y-2">
+            {filteredCustomers.map((customer) => {
               const fullName =
                 `${customer["First Name"] ?? ""} ${customer["Last Name"] ?? ""}`.trim();
               const email = customer.Email ?? "";
-              const customerId = customer.id ?? "";
               return (
                 <button
-                  key={`${customerId || email || "unknown"}-${index}`}
+                  key={customer.id}
                   onClick={() => handleSelect(customer)}
                   className={`w-full text-left rounded-md border px-3 py-2 ${customer.id && customer.id === selectedCustomerId ? "bg-blue-50 border-blue-400" : "bg-white hover:bg-gray-50"}`}
                 >
