@@ -56,7 +56,7 @@ export type RegistrationForm = {
 export type RegistrationSubmissionPayload = {
   participant: ParticipantProfile;
   requestedEventName: string;
-  requestedEventId: string;
+  requestedEventId?: string;
   submissionMeta: {
     source: "public-registration-page";
     preparedAt: string;
@@ -247,7 +247,7 @@ export const createRegistrationSubmissionPayload = (
       updatedAt: preparedAt,
     },
     requestedEventName: requestedEventName || form.event,
-    requestedEventId: requestedEventId || "",
+    requestedEventId: requestedEventId || undefined,
     submissionMeta: {
       source: "public-registration-page",
       preparedAt,
@@ -310,7 +310,7 @@ export function buildRegistrationEvent(
     createdAt: payload.submissionMeta.preparedAt,
     status: "active",
     stationStatuses: buildStationStatuses(),
-    registrationEventId: payload.requestedEventId || undefined,
+    registrationEventId: payload.requestedEventId,
   };
 }
 

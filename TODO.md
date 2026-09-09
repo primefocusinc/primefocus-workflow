@@ -54,9 +54,10 @@ data-integrity, and maintainability concerns.
 
 - [x] `getAllEvents` legacy-backfill inconsistency — moot now that
       `LEGACY_EVENT_NAME_TO_ID` has been removed; no code path backfills `registrationEventId`.
-- [ ] `RegistrationSubmissionPayload.requestedEventId` is typed as required `string` but
+- [x] `RegistrationSubmissionPayload.requestedEventId` is typed as required `string` but
       populated with `""` (`registrationModel.ts:59,250`) and converted back to `undefined`
-      (`registrationModel.ts:313`). Make it `requestedEventId?: string`.
+      (`registrationModel.ts:313`). Made it `requestedEventId?: string`; the payload now
+      carries `undefined` when no event ID is known, and the consumer reads it directly.
 - [ ] No test coverage for the new behavior: `registrationModel.test.ts` never references
       `requestedEventId`/`registrationEventId`, and there are no tests for the filter fallback
       or query-based delete.
