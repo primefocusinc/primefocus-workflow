@@ -749,9 +749,23 @@ export default function Participants() {
             return event;
           }
 
+          // If this is a legacy event (no registrationEventId) and the name is
+          // being changed to match a known catalog event, backfill
+          // registrationEventId so future filter lookups use the stable ID path
+          // rather than the fragile name-match fallback.
+          const incomingName =
+            "eventName" in eventUpdates ? eventUpdates.eventName : undefined;
+          const backfillId =
+            !event.registrationEventId && incomingName !== undefined
+              ? (registrationEvents.find(
+                  (re) => re.eventName === incomingName,
+                )?.id ?? undefined)
+              : undefined;
+
           updatedEvent = {
             ...event,
             ...eventUpdates,
+            ...(backfillId ? { registrationEventId: backfillId } : {}),
             stationStatuses: sortStationStatuses(
               (eventUpdates.stationStatuses ??
                 event.stationStatuses) as StationStatus[],

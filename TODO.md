@@ -42,10 +42,13 @@ data-integrity, and maintainability concerns.
       (covering debounced event saves) all set a user-visible message on failure.
       The error clears when a new action starts or the selected participant changes.
 
-- [ ] **Name-based filter fallback edge cases** (`Participants.tsx:337-344`):
-  - Two catalog entries sharing an `eventName` cause legacy records to match both filters.
-  - Event names are user-editable per event (`Participants.tsx:2024`); renaming a legacy
-    event (no `registrationEventId`) silently drops it from its filter.
+- [x] **Name-based filter fallback edge cases** (`Participants.tsx:337-344`):
+  - Two catalog entries sharing an `eventName` causing legacy records to match both
+    filters is a data-quality issue at the admin level; no code fix applied.
+  - Renaming a legacy event dropping it from its filter: fixed in `updateEvent` —
+    when `eventName` is changed on an event with no `registrationEventId`, the new
+    name is matched against the catalog and `registrationEventId` is backfilled if
+    found, locking the record to the stable ID path going forward.
 
 ## Minor
 
