@@ -61,6 +61,3 @@ data-integrity, and maintainability concerns.
 - [ ] No test coverage for the new behavior: `registrationModel.test.ts` never references
       `requestedEventId`/`registrationEventId`, and there are no tests for the filter fallback
       or query-based delete.
-- [ ] Event IDs still embed the participant email (`${email}-${Date.now()}`,
-      `registrationModel.ts:305`) — pre-existing, but it puts PII in document IDs that cannot
-      be redacted without rekeying.
