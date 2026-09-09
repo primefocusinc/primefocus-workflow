@@ -1,14 +1,23 @@
-import { collection, doc, deleteDoc, getCountFromServer, getDocs, query, setDoc, where } from 'firebase/firestore';
-import type { QueryConstraint } from 'firebase/firestore';
-import { db } from './firebase';
+import {
+  collection,
+  doc,
+  deleteDoc,
+  getCountFromServer,
+  getDocs,
+  query,
+  setDoc,
+  where,
+} from "firebase/firestore";
+import type { QueryConstraint } from "firebase/firestore";
+import { db } from "./firebase";
 
-export type StationDecision = 'PASS' | 'FAIL' | 'REFERRAL' | 'FRAME';
+export type StationDecision = "PASS" | "FAIL" | "REFERRAL" | "FRAME";
 
 export interface StationStatus {
   id: string;
   title: string;
   description: string;
-  status: 'pending' | 'current' | 'complete' | 'skipped';
+  status: "pending" | "current" | "complete" | "skipped";
   decision?: StationDecision;
   printRequested?: boolean;
   pboReferralConfirmed?: boolean;
@@ -22,8 +31,16 @@ export interface EventRecord {
   eventName: string;
   eventDate: string;
   createdAt: string;
-  status: 'planned' | 'active' | 'completed';
+  status: "planned" | "active" | "completed";
   stationStatuses: StationStatus[];
+  registrationEventId?: string; // ID of the RegistrationEventOption catalog entry
+  /**
+   * The actual Firestore document key this event was loaded from. Legacy
+   * documents may be keyed differently from the `id` field stored inside the
+   * document, so saves must target this key (when present) to avoid creating
+   * a duplicate document under the `id` key. Not persisted.
+   */
+  firestoreDocId?: string;
 }
 
 export interface RegistrationEventOption {
@@ -31,7 +48,7 @@ export interface RegistrationEventOption {
   eventName: string;
   eventDate: string;
   createdAt: string;
-  status: 'planned' | 'active' | 'completed';
+  status: "planned" | "active" | "completed";
 }
 
 export interface ParticipantDemographics {
@@ -119,7 +136,13 @@ export interface ParticipantProfile {
   updatedAt: string;
 }
 
-export type CustomerValue = string | boolean | number | EventRecord[] | ParticipantProfile | undefined;
+export type CustomerValue =
+  | string
+  | boolean
+  | number
+  | EventRecord[]
+  | ParticipantProfile
+  | undefined;
 
 export interface CustomerRecord {
   [key: string]: CustomerValue;
@@ -127,6 +150,13 @@ export interface CustomerRecord {
   Email?: string;
   Events?: EventRecord[];
   participant?: ParticipantProfile;
+  /**
+   * The actual Firestore document key this record was loaded from. Older
+   * records were keyed by email while newer ones are keyed by the `id` field,
+   * so the two can differ. Saves must target this key (when present) to avoid
+   * creating a duplicate document under the `id` key. Not persisted.
+   */
+  firestoreDocId?: string;
 }
 
 export interface DashboardStats {
@@ -148,11 +178,21 @@ export interface DashboardEventOption {
   createdAt: string;
 }
 
-const STATION_IDS = ['check-in', 'vision-screening', 'eye-exam', 'frame-selection', 'vision-success'] as const;
+const STATION_IDS = [
+  "check-in",
+  "vision-screening",
+  "eye-exam",
+  "frame-selection",
+  "vision-success",
+] as const;
 const FIRESTORE_IN_QUERY_LIMIT = 30;
 
-function sortStationStatuses(stationStatuses: StationStatus[]): StationStatus[] {
-  const stationOrder = new Map<string, number>(STATION_IDS.map((id, index) => [id, index]));
+function sortStationStatuses(
+  stationStatuses: StationStatus[],
+): StationStatus[] {
+  const stationOrder = new Map<string, number>(
+    STATION_IDS.map((id, index) => [id, index]),
+  );
 
   return [...stationStatuses].sort((left, right) => {
     const leftOrder = stationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
@@ -171,15 +211,19 @@ function toSerializable(value: unknown): unknown {
   }
 
   if (Array.isArray(value)) {
-    return value.map(item => toSerializable(item));
+    return value.map((item) => toSerializable(item));
   }
 
   if (value instanceof Date) {
     return value.toISOString();
   }
 
-  if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [key, toSerializable(entryValue)]));
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(
+        ([key, entryValue]) => [key, toSerializable(entryValue)],
+      ),
+    );
   }
 
   return value;
@@ -187,146 +231,235 @@ function toSerializable(value: unknown): unknown {
 
 function normalizeParticipant(customer: CustomerRecord): ParticipantProfile {
   const existing = customer.participant;
-  const legacyAge = typeof customer['Age'] === 'string' ? Number(customer['Age']) : undefined;
+  const legacyAge =
+    typeof customer["Age"] === "string" ? Number(customer["Age"]) : undefined;
 
   return {
     id: customer.id ?? `participant-${customer.Email ?? Date.now()}`,
-    participantType: (typeof customer['Participant Type'] === 'string' && customer['Participant Type']) ? customer['Participant Type'] : existing?.participantType ?? 'Adult (18+)',
-    firstName: (typeof customer['First Name'] === 'string' && customer['First Name']) ? customer['First Name'] : existing?.firstName ?? '',
-    lastName: (typeof customer['Last Name'] === 'string' && customer['Last Name']) ? customer['Last Name'] : existing?.lastName ?? '',
-    dateOfBirth: (typeof customer['Date of Birth'] === 'string' && customer['Date of Birth']) ? customer['Date of Birth'] : existing?.dateOfBirth ?? '',
-    ageAtEvent: existing?.ageAtEvent ?? (typeof legacyAge === 'number' && Number.isFinite(legacyAge) ? legacyAge : null),
+    participantType:
+      typeof customer["Participant Type"] === "string" &&
+      customer["Participant Type"]
+        ? customer["Participant Type"]
+        : (existing?.participantType ?? "Adult (18+)"),
+    firstName:
+      typeof customer["First Name"] === "string" && customer["First Name"]
+        ? customer["First Name"]
+        : (existing?.firstName ?? ""),
+    lastName:
+      typeof customer["Last Name"] === "string" && customer["Last Name"]
+        ? customer["Last Name"]
+        : (existing?.lastName ?? ""),
+    dateOfBirth:
+      typeof customer["Date of Birth"] === "string" && customer["Date of Birth"]
+        ? customer["Date of Birth"]
+        : (existing?.dateOfBirth ?? ""),
+    ageAtEvent:
+      existing?.ageAtEvent ??
+      (typeof legacyAge === "number" && Number.isFinite(legacyAge)
+        ? legacyAge
+        : null),
     demographics: {
-      gender: (typeof customer['Gender'] === 'string' && customer['Gender']) ? customer['Gender'] : existing?.demographics.gender ?? '',
-      race: (typeof customer['Race'] === 'string' && customer['Race']) ? customer['Race'] : existing?.demographics.race ?? '',
-      ethnicity: (typeof customer['Ethnicity'] === 'string' && customer['Ethnicity']) ? customer['Ethnicity'] : existing?.demographics.ethnicity ?? '',
-      primaryLanguage: (typeof customer['Primary Language'] === 'string' && customer['Primary Language']) ? customer['Primary Language'] : existing?.demographics.primaryLanguage ?? '',
-      veteranStatus: (typeof customer['Veteran Status'] === 'string' && customer['Veteran Status']) ? customer['Veteran Status'] : existing?.demographics.veteranStatus ?? '',
-      lgbtqIdentity: existing?.demographics.lgbtqIdentity ?? '',
-      disabilityStatus: existing?.demographics.disabilityStatus ?? ''
+      gender:
+        typeof customer["Gender"] === "string" && customer["Gender"]
+          ? customer["Gender"]
+          : (existing?.demographics.gender ?? ""),
+      race:
+        typeof customer["Race"] === "string" && customer["Race"]
+          ? customer["Race"]
+          : (existing?.demographics.race ?? ""),
+      ethnicity:
+        typeof customer["Ethnicity"] === "string" && customer["Ethnicity"]
+          ? customer["Ethnicity"]
+          : (existing?.demographics.ethnicity ?? ""),
+      primaryLanguage:
+        typeof customer["Primary Language"] === "string" &&
+        customer["Primary Language"]
+          ? customer["Primary Language"]
+          : (existing?.demographics.primaryLanguage ?? ""),
+      veteranStatus:
+        typeof customer["Veteran Status"] === "string" &&
+        customer["Veteran Status"]
+          ? customer["Veteran Status"]
+          : (existing?.demographics.veteranStatus ?? ""),
+      lgbtqIdentity: existing?.demographics.lgbtqIdentity ?? "",
+      disabilityStatus: existing?.demographics.disabilityStatus ?? "",
     },
     guardian: {
-      name: (typeof customer['Parent/Guardian Name'] === 'string' && customer['Parent/Guardian Name']) ? customer['Parent/Guardian Name'] : existing?.guardian.name ?? '',
-      relationship: (typeof customer['Relationship to Participant'] === 'string' && customer['Relationship to Participant']) ? customer['Relationship to Participant'] : existing?.guardian.relationship ?? '',
-      phoneNumber: (typeof customer['Phone Number'] === 'string' && customer['Phone Number']) ? customer['Phone Number'] : existing?.guardian.phoneNumber ?? '',
-      email: (typeof customer['Parent/Guardian Email'] === 'string' && customer['Parent/Guardian Email']) ? customer['Parent/Guardian Email'] : (typeof customer['Parent/GauEmail'] === 'string' && customer['Parent/GauEmail']) ? customer['Parent/GauEmail'] : existing?.guardian.email ?? ''
+      name:
+        typeof customer["Parent/Guardian Name"] === "string" &&
+        customer["Parent/Guardian Name"]
+          ? customer["Parent/Guardian Name"]
+          : (existing?.guardian.name ?? ""),
+      relationship:
+        typeof customer["Relationship to Participant"] === "string" &&
+        customer["Relationship to Participant"]
+          ? customer["Relationship to Participant"]
+          : (existing?.guardian.relationship ?? ""),
+      phoneNumber:
+        typeof customer["Phone Number"] === "string" && customer["Phone Number"]
+          ? customer["Phone Number"]
+          : (existing?.guardian.phoneNumber ?? ""),
+      email:
+        typeof customer["Parent/Guardian Email"] === "string" &&
+        customer["Parent/Guardian Email"]
+          ? customer["Parent/Guardian Email"]
+          : typeof customer["Parent/GauEmail"] === "string" &&
+              customer["Parent/GauEmail"]
+            ? customer["Parent/GauEmail"]
+            : (existing?.guardian.email ?? ""),
     },
     contact: {
-      preferredCommunication: (typeof customer['Preferred Method of Communication'] === 'string' && customer['Preferred Method of Communication']) ? customer['Preferred Method of Communication'] : existing?.contact.preferredCommunication ?? '',
-      phoneNumber: (typeof customer['Phone number'] === 'string' && customer['Phone number']) ? customer['Phone number'] : existing?.contact.phoneNumber ?? '',
-      email: (typeof customer.Email === 'string' && customer.Email) ? customer.Email : existing?.contact.email ?? ''
+      preferredCommunication:
+        typeof customer["Preferred Method of Communication"] === "string" &&
+        customer["Preferred Method of Communication"]
+          ? customer["Preferred Method of Communication"]
+          : (existing?.contact.preferredCommunication ?? ""),
+      phoneNumber:
+        typeof customer["Phone number"] === "string" && customer["Phone number"]
+          ? customer["Phone number"]
+          : (existing?.contact.phoneNumber ?? ""),
+      email:
+        typeof customer.Email === "string" && customer.Email
+          ? customer.Email
+          : (existing?.contact.email ?? ""),
     },
     address: {
-      streetAddress: (typeof customer['Street Address'] === 'string' && customer['Street Address']) ? customer['Street Address'] : existing?.address.streetAddress ?? '',
-      city: (typeof customer['City'] === 'string' && customer['City']) ? customer['City'] : existing?.address.city ?? '',
-      state: (typeof customer['State '] === 'string' && customer['State ']) ? customer['State '] : existing?.address.state ?? '',
-      zipCode: (typeof customer['ZIP Code'] === 'string' && customer['ZIP Code']) ? customer['ZIP Code'] : existing?.address.zipCode ?? ''
+      streetAddress:
+        typeof customer["Street Address"] === "string" &&
+        customer["Street Address"]
+          ? customer["Street Address"]
+          : (existing?.address.streetAddress ?? ""),
+      city:
+        typeof customer["City"] === "string" && customer["City"]
+          ? customer["City"]
+          : (existing?.address.city ?? ""),
+      state:
+        typeof customer["State "] === "string" && customer["State "]
+          ? customer["State "]
+          : (existing?.address.state ?? ""),
+      zipCode:
+        typeof customer["ZIP Code"] === "string" && customer["ZIP Code"]
+          ? customer["ZIP Code"]
+          : (existing?.address.zipCode ?? ""),
     },
     school: {
-      name: (typeof customer['School Name'] === 'string' && customer['School Name']) ? customer['School Name'] : existing?.school.name ?? '',
-      district: (typeof customer['School District'] === 'string' && customer['School District']) ? customer['School District'] : existing?.school.district ?? '',
-      currentGrade: (typeof customer['Current Grade'] === 'string' && customer['Current Grade']) ? customer['Current Grade'] : existing?.school.currentGrade ?? ''
+      name:
+        typeof customer["School Name"] === "string" && customer["School Name"]
+          ? customer["School Name"]
+          : (existing?.school.name ?? ""),
+      district:
+        typeof customer["School District"] === "string" &&
+        customer["School District"]
+          ? customer["School District"]
+          : (existing?.school.district ?? ""),
+      currentGrade:
+        typeof customer["Current Grade"] === "string" &&
+        customer["Current Grade"]
+          ? customer["Current Grade"]
+          : (existing?.school.currentGrade ?? ""),
     },
     visionIntake: {
-      wearsGlasses: existing?.visionIntake?.wearsGlasses ?? '',
-      glassesStatus: existing?.visionIntake?.glassesStatus ?? '',
-      glassesStatusOther: existing?.visionIntake?.glassesStatusOther ?? '',
-      wearsContacts: existing?.visionIntake?.wearsContacts ?? '',
-      lastEyeExam: existing?.visionIntake?.lastEyeExam ?? '',
-      eyeCareProvider: existing?.visionIntake?.eyeCareProvider ?? '',
-      toldNeedsGlasses: existing?.visionIntake?.toldNeedsGlasses ?? '',
+      wearsGlasses: existing?.visionIntake?.wearsGlasses ?? "",
+      glassesStatus: existing?.visionIntake?.glassesStatus ?? "",
+      glassesStatusOther: existing?.visionIntake?.glassesStatusOther ?? "",
+      wearsContacts: existing?.visionIntake?.wearsContacts ?? "",
+      lastEyeExam: existing?.visionIntake?.lastEyeExam ?? "",
+      eyeCareProvider: existing?.visionIntake?.eyeCareProvider ?? "",
+      toldNeedsGlasses: existing?.visionIntake?.toldNeedsGlasses ?? "",
       currentConcerns: existing?.visionIntake?.currentConcerns ?? [],
-      currentConcernsOther: existing?.visionIntake?.currentConcernsOther ?? ''
+      currentConcernsOther: existing?.visionIntake?.currentConcernsOther ?? "",
     },
     insurance: {
-      visionInsurance: existing?.insurance?.visionInsurance ?? '',
-      medicalInsuranceProvider: existing?.insurance?.medicalInsuranceProvider ?? ''
+      visionInsurance: existing?.insurance?.visionInsurance ?? "",
+      medicalInsuranceProvider:
+        existing?.insurance?.medicalInsuranceProvider ?? "",
     },
     resourceInterests: existing?.resourceInterests ?? [],
-    resourceOther: existing?.resourceOther ?? '',
-    referralSource: existing?.referralSource ?? '',
+    resourceOther: existing?.resourceOther ?? "",
+    referralSource: existing?.referralSource ?? "",
     consents: {
       consentToParticipate: existing?.consents?.consentToParticipate ?? false,
       photoVideoRelease: existing?.consents?.photoVideoRelease ?? false,
-      communicationAuthorization: existing?.consents?.communicationAuthorization ?? false,
+      communicationAuthorization:
+        existing?.consents?.communicationAuthorization ?? false,
       acknowledgement: existing?.consents?.acknowledgement ?? false,
-      printedName: existing?.consents?.printedName ?? '',
-      signatureDate: existing?.consents?.signatureDate ?? ''
+      printedName: existing?.consents?.printedName ?? "",
+      signatureDate: existing?.consents?.signatureDate ?? "",
     },
     checkedIn: existing?.checkedIn ?? false,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
-    updatedAt: existing?.updatedAt ?? new Date().toISOString()
+    updatedAt: existing?.updatedAt ?? new Date().toISOString(),
   };
 }
 
 export function createDefaultParticipantProfile(): ParticipantProfile {
   return {
-    id: '',
-    participantType: '',
-    firstName: '',
-    lastName: '',
-    dateOfBirth: '',
+    id: "",
+    participantType: "",
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
     ageAtEvent: null,
     demographics: {
-      gender: '',
-      race: '',
-      ethnicity: '',
-      primaryLanguage: '',
-      veteranStatus: '',
-      lgbtqIdentity: '',
-      disabilityStatus: ''
+      gender: "",
+      race: "",
+      ethnicity: "",
+      primaryLanguage: "",
+      veteranStatus: "",
+      lgbtqIdentity: "",
+      disabilityStatus: "",
     },
     guardian: {
-      name: '',
-      relationship: '',
-      phoneNumber: '',
-      email: ''
+      name: "",
+      relationship: "",
+      phoneNumber: "",
+      email: "",
     },
     contact: {
-      preferredCommunication: '',
-      phoneNumber: '',
-      email: ''
+      preferredCommunication: "",
+      phoneNumber: "",
+      email: "",
     },
     address: {
-      streetAddress: '',
-      city: '',
-      state: '',
-      zipCode: ''
+      streetAddress: "",
+      city: "",
+      state: "",
+      zipCode: "",
     },
     school: {
-      name: '',
-      district: '',
-      currentGrade: ''
+      name: "",
+      district: "",
+      currentGrade: "",
     },
     visionIntake: {
-      wearsGlasses: '',
-      glassesStatus: '',
-      glassesStatusOther: '',
-      wearsContacts: '',
-      lastEyeExam: '',
-      eyeCareProvider: '',
-      toldNeedsGlasses: '',
+      wearsGlasses: "",
+      glassesStatus: "",
+      glassesStatusOther: "",
+      wearsContacts: "",
+      lastEyeExam: "",
+      eyeCareProvider: "",
+      toldNeedsGlasses: "",
       currentConcerns: [],
-      currentConcernsOther: ''
+      currentConcernsOther: "",
     },
     insurance: {
-      visionInsurance: '',
-      medicalInsuranceProvider: ''
+      visionInsurance: "",
+      medicalInsuranceProvider: "",
     },
     resourceInterests: [],
-    resourceOther: '',
-    referralSource: '',
+    resourceOther: "",
+    referralSource: "",
     consents: {
       consentToParticipate: false,
       photoVideoRelease: false,
       communicationAuthorization: false,
       acknowledgement: false,
-      printedName: '',
-      signatureDate: ''
+      printedName: "",
+      signatureDate: "",
     },
     checkedIn: false,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -334,25 +467,43 @@ function normalizeEventRecord(event: EventRecord): EventRecord {
   return {
     ...event,
     stationStatuses: sortStationStatuses(event.stationStatuses ?? []),
-    createdAt: event.createdAt || new Date(event.eventDate || new Date().toISOString()).toISOString()
+    createdAt:
+      event.createdAt ||
+      new Date(event.eventDate || new Date().toISOString()).toISOString(),
   };
 }
 
-function normalizeRegistrationEventOption(event: Partial<RegistrationEventOption> & { id: string }): RegistrationEventOption {
+function normalizeRegistrationEventOption(
+  event: Partial<RegistrationEventOption> & { id: string },
+): RegistrationEventOption {
   const today = new Date().toISOString().slice(0, 10);
 
   return {
     id: event.id,
-    eventName: (typeof event.eventName === 'string' && event.eventName.trim()) ? event.eventName.trim() : 'Community Vision Event',
-    eventDate: (typeof event.eventDate === 'string' && event.eventDate.trim()) ? event.eventDate.trim() : today,
-    createdAt: (typeof event.createdAt === 'string' && event.createdAt.trim()) ? event.createdAt.trim() : new Date().toISOString(),
-    status: event.status ?? 'active'
+    eventName:
+      typeof event.eventName === "string" && event.eventName.trim()
+        ? event.eventName.trim()
+        : "Community Vision Event",
+    eventDate:
+      typeof event.eventDate === "string" && event.eventDate.trim()
+        ? event.eventDate.trim()
+        : today,
+    createdAt:
+      typeof event.createdAt === "string" && event.createdAt.trim()
+        ? event.createdAt.trim()
+        : new Date().toISOString(),
+    status: event.status ?? "active",
   };
 }
 
-function sortRegistrationEventOptions(left: RegistrationEventOption, right: RegistrationEventOption): number {
-  const leftTime = Date.parse(left.eventDate || left.createdAt || '1970-01-01');
-  const rightTime = Date.parse(right.eventDate || right.createdAt || '1970-01-01');
+function sortRegistrationEventOptions(
+  left: RegistrationEventOption,
+  right: RegistrationEventOption,
+): number {
+  const leftTime = Date.parse(left.eventDate || left.createdAt || "1970-01-01");
+  const rightTime = Date.parse(
+    right.eventDate || right.createdAt || "1970-01-01",
+  );
 
   if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
     return 0;
@@ -371,11 +522,12 @@ function sortRegistrationEventOptions(left: RegistrationEventOption, right: Regi
 
 async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
   try {
-    const [participantsSnapshot, eventsSnapshot, stationStatusesSnapshot] = await Promise.all([
-      getDocs(collection(db, 'participants')),
-      getDocs(collection(db, 'events')),
-      getDocs(collection(db, 'stationStatuses'))
-    ]);
+    const [participantsSnapshot, eventsSnapshot, stationStatusesSnapshot] =
+      await Promise.all([
+        getDocs(collection(db, "participants")),
+        getDocs(collection(db, "events")),
+        getDocs(collection(db, "stationStatuses")),
+      ]);
 
     // Build station statuses map: eventId -> StationStatus[]
     const stationsByEvent: Record<string, StationStatus[]> = {};
@@ -396,7 +548,8 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
       const event: EventRecord = {
         ...data,
         id: data.id ?? eventDoc.id,
-        stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? []
+        firestoreDocId: eventDoc.id,
+        stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? [],
       };
       if (!eventsByParticipant[participantId]) {
         eventsByParticipant[participantId] = [];
@@ -404,22 +557,29 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
       eventsByParticipant[participantId].push(normalizeEventRecord(event));
     }
 
-    return participantsSnapshot.docs.map(docSnapshot => {
+    return participantsSnapshot.docs.map((docSnapshot) => {
       const data = docSnapshot.data() as Partial<CustomerRecord>;
-      const fallbackEmail = typeof data.Email === 'string' ? data.Email.trim() : docSnapshot.id;
+      const fallbackEmail =
+        typeof data.Email === "string" ? data.Email.trim() : docSnapshot.id;
       const normalizedEmail = fallbackEmail.toLowerCase();
       const participantId = data.id ?? docSnapshot.id;
 
       return {
         ...(data as CustomerRecord),
         id: participantId,
+        firestoreDocId: docSnapshot.id,
         Email: normalizedEmail,
-        participant: data.participant ? data.participant : normalizeParticipant({ ...(data as CustomerRecord), Email: normalizedEmail }),
-        Events: eventsByParticipant[participantId] ?? []
+        participant: data.participant
+          ? data.participant
+          : normalizeParticipant({
+              ...(data as CustomerRecord),
+              Email: normalizedEmail,
+            }),
+        Events: eventsByParticipant[participantId] ?? [],
       } satisfies CustomerRecord;
     });
   } catch (error) {
-    console.warn('Unable to load participants from Firestore.', error);
+    console.warn("Unable to load participants from Firestore.", error);
     return [];
   }
 }
@@ -427,11 +587,13 @@ async function readCustomersFromFirebase(): Promise<CustomerRecord[]> {
 export async function getCustomers(): Promise<CustomerRecord[]> {
   const firebaseCustomers = await readCustomersFromFirebase();
 
-  return firebaseCustomers.map(customer => ({
+  return firebaseCustomers.map((customer) => ({
     ...customer,
-    Email: customer.Email ?? '',
+    Email: customer.Email ?? "",
     participant: customer.participant ?? normalizeParticipant(customer),
-    Events: Array.isArray(customer.Events) ? customer.Events.map(normalizeEventRecord) : []
+    Events: Array.isArray(customer.Events)
+      ? customer.Events.map(normalizeEventRecord)
+      : [],
   }));
 }
 
@@ -446,7 +608,7 @@ function createEmptyDashboardStats(): DashboardStats {
     examCompleted: 0,
     examInQueue: 0,
     referralOut: 0,
-    rxFrameSelected: 0
+    rxFrameSelected: 0,
   };
 }
 
@@ -458,31 +620,47 @@ function chunkValues<T>(values: T[], size: number): T[][] {
   return chunks;
 }
 
-async function getCount(collectionName: string, constraints: QueryConstraint[]): Promise<number> {
-  const snapshot = await getCountFromServer(query(collection(db, collectionName), ...constraints));
+async function getCount(
+  collectionName: string,
+  constraints: QueryConstraint[],
+): Promise<number> {
+  const snapshot = await getCountFromServer(
+    query(collection(db, collectionName), ...constraints),
+  );
   return snapshot.data().count;
 }
 
-async function getStationCount(stationId: string, constraints: QueryConstraint[], eventIds?: string[]): Promise<number> {
-  const baseConstraints = [where('id', '==', stationId), ...constraints];
+async function getStationCount(
+  stationId: string,
+  constraints: QueryConstraint[],
+  eventIds?: string[],
+): Promise<number> {
+  const baseConstraints = [where("id", "==", stationId), ...constraints];
 
   if (!eventIds) {
-    return getCount('stationStatuses', baseConstraints);
+    return getCount("stationStatuses", baseConstraints);
   }
 
   if (eventIds.length === 0) {
     return 0;
   }
 
-  const counts = await Promise.all(chunkValues(eventIds, FIRESTORE_IN_QUERY_LIMIT).map(chunk =>
-    getCount('stationStatuses', [...baseConstraints, where('eventId', 'in', chunk)])
-  ));
+  const counts = await Promise.all(
+    chunkValues(eventIds, FIRESTORE_IN_QUERY_LIMIT).map((chunk) =>
+      getCount("stationStatuses", [
+        ...baseConstraints,
+        where("eventId", "in", chunk),
+      ]),
+    ),
+  );
 
   return counts.reduce((total, count) => total + count, 0);
 }
 
-export async function getDashboardEventOptions(): Promise<DashboardEventOption[]> {
-  const eventsSnapshot = await getDocs(collection(db, 'events'));
+export async function getDashboardEventOptions(): Promise<
+  DashboardEventOption[]
+> {
+  const eventsSnapshot = await getDocs(collection(db, "events"));
   const byName = new Map<string, DashboardEventOption>();
 
   for (const eventDoc of eventsSnapshot.docs) {
@@ -493,8 +671,8 @@ export async function getDashboardEventOptions(): Promise<DashboardEventOption[]
 
     const option = {
       eventName: data.eventName,
-      eventDate: data.eventDate ?? '',
-      createdAt: data.createdAt ?? ''
+      eventDate: data.eventDate ?? "",
+      createdAt: data.createdAt ?? "",
     };
     const existing = byName.get(data.eventName);
     if (!existing || sortEventOptionByRecency(option, existing) < 0) {
@@ -505,9 +683,14 @@ export async function getDashboardEventOptions(): Promise<DashboardEventOption[]
   return Array.from(byName.values()).sort(sortEventOptionByRecency);
 }
 
-function sortEventOptionByRecency(left: DashboardEventOption, right: DashboardEventOption): number {
-  const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
-  const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
+function sortEventOptionByRecency(
+  left: DashboardEventOption,
+  right: DashboardEventOption,
+): number {
+  const leftTime = Date.parse(left.createdAt || left.eventDate || "1970-01-01");
+  const rightTime = Date.parse(
+    right.createdAt || right.eventDate || "1970-01-01",
+  );
 
   if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
     return 0;
@@ -522,20 +705,28 @@ function sortEventOptionByRecency(left: DashboardEventOption, right: DashboardEv
   return rightTime - leftTime;
 }
 
-export async function getDashboardStats(viewMode: 'this' | 'all', selectedEventName: string): Promise<DashboardStats> {
+export async function getDashboardStats(
+  viewMode: "this" | "all",
+  selectedEventName: string,
+): Promise<DashboardStats> {
   let eventIds: string[] | undefined;
   let registered = 0;
 
-  if (viewMode === 'this') {
+  if (viewMode === "this") {
     if (!selectedEventName) {
       return createEmptyDashboardStats();
     }
 
-    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('eventName', '==', selectedEventName)));
-    eventIds = eventsSnapshot.docs.map(eventDoc => eventDoc.id);
+    const eventsSnapshot = await getDocs(
+      query(
+        collection(db, "events"),
+        where("eventName", "==", selectedEventName),
+      ),
+    );
+    eventIds = eventsSnapshot.docs.map((eventDoc) => eventDoc.id);
     registered = eventIds.length;
   } else {
-    registered = await getCount('events', []);
+    registered = await getCount("events", []);
   }
 
   const [
@@ -546,16 +737,36 @@ export async function getDashboardStats(viewMode: 'this' | 'all', selectedEventN
     examCompleted,
     examInQueue,
     referralOut,
-    rxFrameSelected
+    rxFrameSelected,
   ] = await Promise.all([
-    getStationCount('check-in', [where('status', '==', 'complete')], eventIds),
-    getStationCount('vision-screening', [where('status', '==', 'complete')], eventIds),
-    getStationCount('vision-screening', [where('decision', '==', 'PASS')], eventIds),
-    getStationCount('vision-screening', [where('decision', '==', 'FAIL')], eventIds),
-    getStationCount('eye-exam', [where('status', '==', 'complete')], eventIds),
-    getStationCount('eye-exam', [where('status', '==', 'current')], eventIds),
-    getStationCount('eye-exam', [where('decision', '==', 'REFERRAL')], eventIds),
-    getStationCount('frame-selection', [where('status', '==', 'complete')], eventIds)
+    getStationCount("check-in", [where("status", "==", "complete")], eventIds),
+    getStationCount(
+      "vision-screening",
+      [where("status", "==", "complete")],
+      eventIds,
+    ),
+    getStationCount(
+      "vision-screening",
+      [where("decision", "==", "PASS")],
+      eventIds,
+    ),
+    getStationCount(
+      "vision-screening",
+      [where("decision", "==", "FAIL")],
+      eventIds,
+    ),
+    getStationCount("eye-exam", [where("status", "==", "complete")], eventIds),
+    getStationCount("eye-exam", [where("status", "==", "current")], eventIds),
+    getStationCount(
+      "eye-exam",
+      [where("decision", "==", "REFERRAL")],
+      eventIds,
+    ),
+    getStationCount(
+      "frame-selection",
+      [where("status", "==", "complete")],
+      eventIds,
+    ),
   ]);
 
   return {
@@ -568,53 +779,63 @@ export async function getDashboardStats(viewMode: 'this' | 'all', selectedEventN
     examCompleted,
     examInQueue,
     referralOut,
-    rxFrameSelected
+    rxFrameSelected,
   };
 }
 
-export async function saveCustomers(customers: CustomerRecord[]): Promise<void> {
-  await Promise.all(customers.map((customer, index) => {
-    const normalizedEmail = customer.Email?.trim().toLowerCase();
-    const documentId = customer.id || normalizedEmail || `customer-${index}`;
-    const participantId = customer.id ?? documentId;
-    const { Events, ...customerWithoutEvents } = customer;
-    const payload = toSerializable({
-      ...customerWithoutEvents,
-      Email: normalizedEmail ?? customer.Email
-    }) as Record<string, unknown>;
-    const saveParticipant = setDoc(doc(db, 'participants', documentId), payload, { merge: true });
-    const saveEvents = Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
-    return Promise.all([saveParticipant, saveEvents]);
-  }));
-}
-
-export async function saveRegistrationCustomer(customer: CustomerRecord): Promise<void> {
+export async function saveRegistrationCustomer(
+  customer: CustomerRecord,
+): Promise<void> {
   await saveCustomerToFirebase(customer);
 }
 
-async function saveCustomerToFirebase(customer: CustomerRecord, fallbackDocumentId?: string): Promise<void> {
+export async function saveCustomerToFirebase(
+  customer: CustomerRecord,
+  fallbackDocumentId?: string,
+): Promise<void> {
   const normalizedEmail = customer.Email?.trim().toLowerCase();
-  const documentId = customer.id || normalizedEmail || fallbackDocumentId;
+  const participantId = customer.id || fallbackDocumentId;
 
-  if (!documentId) {
-    throw new Error('A participant email or id is required before saving to Firestore.');
+  if (!participantId) {
+    throw new Error("A participant id is required before saving to Firestore.");
   }
 
-  const participantId = customer.id ?? documentId;
-  const { Events, ...customerWithoutEvents } = customer;
+  // Write back to the document key the record was loaded from. Older records
+  // are keyed by email rather than the participant id; writing to the id key
+  // for those would create a duplicate document.
+  const documentId = customer.firestoreDocId || participantId;
+  const { Events, firestoreDocId: _firestoreDocId, ...customerWithoutEvents } =
+    customer;
   const payload = toSerializable({
     ...customerWithoutEvents,
-    Email: normalizedEmail ?? customer.Email
+    Email: normalizedEmail ?? customer.Email,
   }) as Record<string, unknown>;
 
   try {
-    await setDoc(doc(db, 'participants', documentId), payload, { merge: true });
+    await setDoc(doc(db, "participants", documentId), payload, { merge: true });
   } catch (error) {
-    console.error(`Failed to write participant ${documentId} to Firestore:`, error);
-    throw new Error(`Failed to save participant record: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `Failed to write participant ${documentId} to Firestore:`,
+      error,
+    );
+    throw new Error(
+      `Failed to save participant record: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
-  await Promise.all((Events ?? []).map(event => saveEventDocToFirebase(event, participantId)));
+  await Promise.all(
+    (Events ?? []).map((event) => saveEventDocToFirebase(event, participantId)),
+  );
+}
+
+export async function saveParticipantEvent(event: EventRecord): Promise<void> {
+  if (!event.participantId) {
+    throw new Error(
+      "An event participantId is required before saving to Firestore.",
+    );
+  }
+
+  await saveEventDocToFirebase(event, event.participantId);
 }
 
 export async function deleteCustomerByEmail(email: string): Promise<void> {
@@ -624,7 +845,9 @@ export async function deleteCustomerByEmail(email: string): Promise<void> {
   }
 
   const customers = await getCustomers();
-  const target = customers.find(customer => customer.Email?.toLowerCase() === normalizedEmail);
+  const target = customers.find(
+    (customer) => customer.Email?.toLowerCase() === normalizedEmail,
+  );
   if (!target?.id) {
     return;
   }
@@ -638,71 +861,137 @@ export async function deleteCustomerById(participantId: string): Promise<void> {
     return;
   }
 
-  const customers = await getCustomers();
-  const nextCustomers = customers.filter(customer => customer.id !== normalizedParticipantId);
-
-  await saveCustomers(nextCustomers);
-
   try {
-    await deleteDoc(doc(db, 'participants', normalizedParticipantId));
+    // The Firestore document key may differ from the id field stored inside the
+    // document (older records were keyed by email). Query to find the real ref.
+    const participantsSnapshot = await getDocs(
+      query(
+        collection(db, "participants"),
+        where("id", "==", normalizedParticipantId),
+      ),
+    );
+
+    // Also try a direct lookup in case the document key matches the id.
+    const directRef = doc(db, "participants", normalizedParticipantId);
+
+    const refsToDelete = participantsSnapshot.empty
+      ? [directRef]
+      : participantsSnapshot.docs.map((d) => d.ref);
+
+    await Promise.all(refsToDelete.map((ref) => deleteDoc(ref)));
 
     // Delete all events and their station statuses for this participant
-    const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('participantId', '==', normalizedParticipantId)));
-    await Promise.all(eventsSnapshot.docs.map(async eventDoc => {
-      await deleteDoc(eventDoc.ref);
-      await Promise.all(STATION_IDS.map(stationId =>
-        deleteDoc(doc(db, 'stationStatuses', `${eventDoc.id}_${stationId}`))
-      ));
-    }));
+    const eventsSnapshot = await getDocs(
+      query(
+        collection(db, "events"),
+        where("participantId", "==", normalizedParticipantId),
+      ),
+    );
+    await Promise.all(
+      eventsSnapshot.docs.map(async (eventDoc) => {
+        await deleteDoc(eventDoc.ref);
+        await Promise.all(
+          STATION_IDS.map((stationId) =>
+            deleteDoc(
+              doc(db, "stationStatuses", `${eventDoc.id}_${stationId}`),
+            ),
+          ),
+        );
+      }),
+    );
   } catch (error) {
-    console.warn('Unable to delete participant from Firestore; local storage was updated instead.', error);
+    console.error("Unable to delete participant from Firestore.", error);
+    throw error;
   }
 }
 
 export async function deleteEventFromFirebase(eventId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'events', eventId));
-    await Promise.all(STATION_IDS.map(stationId =>
-      deleteDoc(doc(db, 'stationStatuses', `${eventId}_${stationId}`))
-    ));
+    // The Firestore document key may differ from the id field stored inside
+    // the document (legacy records). Query for the real refs and fall back to
+    // a direct lookup when the query finds nothing.
+    const eventsSnapshot = await getDocs(
+      query(collection(db, "events"), where("id", "==", eventId)),
+    );
+    const refsToDelete = eventsSnapshot.empty
+      ? [doc(db, "events", eventId)]
+      : eventsSnapshot.docs.map((d) => d.ref);
+    await Promise.all(refsToDelete.map((ref) => deleteDoc(ref)));
+
+    // Station status docs are keyed by the event's id field; also cover any
+    // legacy docs keyed by a mismatched event document key (deleting a
+    // nonexistent doc is a no-op).
+    const stationKeyPrefixes = new Set<string>([
+      eventId,
+      ...eventsSnapshot.docs.map((d) => d.id),
+    ]);
+    await Promise.all(
+      Array.from(stationKeyPrefixes).flatMap((prefix) =>
+        STATION_IDS.map((stationId) =>
+          deleteDoc(doc(db, "stationStatuses", `${prefix}_${stationId}`)),
+        ),
+      ),
+    );
   } catch (error) {
-    console.warn('Unable to delete event from Firestore.', error);
+    console.error("Unable to delete event from Firestore.", error);
+    throw error;
   }
 }
 
-async function saveEventDocToFirebase(event: EventRecord, participantId: string): Promise<void> {
-  const { stationStatuses, ...eventFields } = event;
+async function saveEventDocToFirebase(
+  event: EventRecord,
+  participantId: string,
+): Promise<void> {
+  const { stationStatuses, firestoreDocId: _firestoreDocId, ...eventFields } =
+    event;
   const eventPayload = toSerializable({
     ...eventFields,
     participantId,
-      stationStatuses: sortStationStatuses(stationStatuses),
+    stationStatuses: sortStationStatuses(stationStatuses),
   }) as Record<string, unknown>;
+  // Write back to the document key the event was loaded from; legacy documents
+  // may be keyed differently from the `id` field, and writing to the id key
+  // for those would create a duplicate document.
+  const documentId = event.firestoreDocId || event.id;
   try {
-    await setDoc(doc(db, 'events', event.id), eventPayload);
+    await setDoc(doc(db, "events", documentId), eventPayload);
   } catch (error) {
-    console.error(`Failed to write event ${event.id} to Firestore:`, error);
-    throw new Error(`Failed to save event record: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Failed to write event ${documentId} to Firestore:`, error);
+    throw new Error(
+      `Failed to save event record: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
-  await Promise.all(stationStatuses.map(async status => {
-    const docId = `${event.id}_${status.id}`;
-    const payload = toSerializable({
-      ...status,
-      eventId: event.id,
-      participantId,
-    }) as Record<string, unknown>;
-    try {
-      await setDoc(doc(db, 'stationStatuses', docId), payload);
-    } catch (error) {
-      console.error(`Failed to write stationStatus ${docId} to Firestore:`, error);
-      throw new Error(`Failed to save station status record: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }));
+  await Promise.all(
+    stationStatuses.map(async (status) => {
+      const docId = `${event.id}_${status.id}`;
+      const payload = toSerializable({
+        ...status,
+        eventId: event.id,
+        participantId,
+      }) as Record<string, unknown>;
+      try {
+        await setDoc(doc(db, "stationStatuses", docId), payload);
+      } catch (error) {
+        console.error(
+          `Failed to write stationStatus ${docId} to Firestore:`,
+          error,
+        );
+        throw new Error(
+          `Failed to save station status record: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
 }
 
-export async function getCustomerByEmail(email: string): Promise<CustomerRecord | undefined> {
+export async function getCustomerByEmail(
+  email: string,
+): Promise<CustomerRecord | undefined> {
   const customers = await getCustomers();
-  return customers.find(customer => customer.Email?.toLowerCase() === email.toLowerCase());
+  return customers.find(
+    (customer) => customer.Email?.toLowerCase() === email.toLowerCase(),
+  );
 }
 
 export async function getCustomersFromFirebase(): Promise<CustomerRecord[]> {
@@ -712,8 +1001,8 @@ export async function getCustomersFromFirebase(): Promise<CustomerRecord[]> {
 export async function getAllEvents(): Promise<EventRecord[]> {
   try {
     const [eventsSnapshot, stationStatusesSnapshot] = await Promise.all([
-      getDocs(collection(db, 'events')),
-      getDocs(collection(db, 'stationStatuses')),
+      getDocs(collection(db, "events")),
+      getDocs(collection(db, "stationStatuses")),
     ]);
 
     const stationsByEvent: Record<string, StationStatus[]> = {};
@@ -727,17 +1016,21 @@ export async function getAllEvents(): Promise<EventRecord[]> {
     }
 
     return eventsSnapshot.docs
-      .map(eventDoc => {
+      .map((eventDoc) => {
         const data = eventDoc.data() as EventRecord;
         return normalizeEventRecord({
           ...data,
           id: data.id ?? eventDoc.id,
-          stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? []
+          stationStatuses: stationsByEvent[data.id ?? eventDoc.id] ?? [],
         });
       })
       .sort((left, right) => {
-        const leftTime = Date.parse(left.createdAt || left.eventDate || '1970-01-01');
-        const rightTime = Date.parse(right.createdAt || right.eventDate || '1970-01-01');
+        const leftTime = Date.parse(
+          left.createdAt || left.eventDate || "1970-01-01",
+        );
+        const rightTime = Date.parse(
+          right.createdAt || right.eventDate || "1970-01-01",
+        );
 
         if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
           return 0;
@@ -754,34 +1047,44 @@ export async function getAllEvents(): Promise<EventRecord[]> {
         return rightTime - leftTime;
       });
   } catch (error) {
-    console.warn('Unable to load participant events from Firestore.', error);
+    console.warn("Unable to load participant events from Firestore.", error);
     return [];
   }
 }
 
-export async function getRegistrationEvents(): Promise<RegistrationEventOption[]> {
+export async function getRegistrationEvents(): Promise<
+  RegistrationEventOption[]
+> {
   try {
-    const snapshot = await getDocs(collection(db, 'registrationEvents'));
+    const snapshot = await getDocs(collection(db, "registrationEvents"));
     return snapshot.docs
-      .map(docSnapshot => normalizeRegistrationEventOption({ id: docSnapshot.id, ...(docSnapshot.data() as Partial<RegistrationEventOption>) }))
+      .map((docSnapshot) =>
+        normalizeRegistrationEventOption({
+          id: docSnapshot.id,
+          ...(docSnapshot.data() as Partial<RegistrationEventOption>),
+        }),
+      )
       .sort(sortRegistrationEventOptions);
   } catch (error) {
-    console.warn('Unable to load registration events from Firestore.', error);
+    console.warn("Unable to load registration events from Firestore.", error);
     return [];
   }
 }
 
-export async function createRegistrationEvent(eventName: string, eventDate: string): Promise<RegistrationEventOption> {
+export async function createRegistrationEvent(
+  eventName: string,
+  eventDate: string,
+): Promise<RegistrationEventOption> {
   const id = `registration-event-${Date.now()}`;
   const normalized = normalizeRegistrationEventOption({
     id,
     eventName,
     eventDate,
     createdAt: new Date().toISOString(),
-    status: 'active'
+    status: "active",
   });
 
-  await setDoc(doc(db, 'registrationEvents', id), normalized);
+  await setDoc(doc(db, "registrationEvents", id), normalized);
   return normalized;
 }
 
@@ -791,5 +1094,5 @@ export async function deleteRegistrationEvent(eventId: string): Promise<void> {
     return;
   }
 
-  await deleteDoc(doc(db, 'registrationEvents', normalizedId));
+  await deleteDoc(doc(db, "registrationEvents", normalizedId));
 }

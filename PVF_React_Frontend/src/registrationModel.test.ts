@@ -192,6 +192,34 @@ describe('Firestore customer record preparation', () => {
     ])
     expect(event?.stationStatuses[0]?.status).toBe('current')
   })
+
+  it('omits registrationEventId on the event record when no requestedEventId is provided', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(preparedAt))
+
+    const payload = createRegistrationSubmissionPayload(buildCompleteForm())
+    expect(payload.requestedEventId).toBeUndefined()
+
+    const event = createCustomerRecordFromPayload(payload).Events?.[0]
+    expect(event?.registrationEventId).toBeUndefined()
+  })
+
+  it('propagates requestedEventId to registrationEventId on the event record', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(preparedAt))
+
+    const eventId = 'registration-event-1234567890'
+    const payload = createRegistrationSubmissionPayload(
+      buildCompleteForm(),
+      'Spring Vision Fair',
+      eventId,
+    )
+    expect(payload.requestedEventId).toBe(eventId)
+
+    const event = createCustomerRecordFromPayload(payload).Events?.[0]
+    expect(event?.registrationEventId).toBe(eventId)
+    expect(event?.eventName).toBe('Spring Vision Fair')
+  })
 })
 
 describe('createParticipantId', () => {
