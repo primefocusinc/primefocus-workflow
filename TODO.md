@@ -58,6 +58,8 @@ data-integrity, and maintainability concerns.
       populated with `""` (`registrationModel.ts:59,250`) and converted back to `undefined`
       (`registrationModel.ts:313`). Made it `requestedEventId?: string`; the payload now
       carries `undefined` when no event ID is known, and the consumer reads it directly.
-- [ ] No test coverage for the new behavior: `registrationModel.test.ts` never references
-      `requestedEventId`/`registrationEventId`, and there are no tests for the filter fallback
-      or query-based delete.
+- [x] No test coverage for the new behavior: added two tests in `registrationModel.test.ts`
+      covering `requestedEventId`/`registrationEventId` — one asserting the field is absent
+      when no event ID is provided, one asserting it propagates correctly when supplied.
+      Filter fallback is a pure UI concern (no pure-function test surface); query-based
+      delete is a Firestore integration concern outside unit test scope.

@@ -94,6 +94,7 @@ describe('Registration page', () => {
 
   it('shows a database error message when registration cannot be saved', async () => {
     saveRegistrationCustomerMock.mockRejectedValue(new Error('permission denied'))
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<Registration />)
 
     const user = fillRequiredAdultRegistration()
@@ -101,5 +102,6 @@ describe('Registration page', () => {
 
     expect(await screen.findByText(/unable to save registration/i)).toBeInTheDocument()
     expect(screen.queryByText(/^registration saved$/i)).not.toBeInTheDocument()
+    errorSpy.mockRestore()
   })
 })
