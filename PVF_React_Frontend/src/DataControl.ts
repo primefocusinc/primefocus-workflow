@@ -2,13 +2,11 @@ import {
   collection,
   doc,
   deleteDoc,
-  getCountFromServer,
   getDocs,
   query,
   setDoc,
   where,
 } from "firebase/firestore";
-import type { QueryConstraint } from "firebase/firestore";
 import { db } from "./firebase";
 
 export type StationDecision = "PASS" | "FAIL" | "REFERRAL" | "FRAME";
@@ -186,7 +184,6 @@ const STATION_IDS = [
   "frame-selection",
   "vision-success",
 ] as const;
-const FIRESTORE_IN_QUERY_LIMIT = 30;
 
 function sortStationStatuses(
   stationStatuses: StationStatus[],
@@ -613,51 +610,6 @@ function createEmptyDashboardStats(): DashboardStats {
   };
 }
 
-function chunkValues<T>(values: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-  return chunks;
-}
-
-async function getCount(
-  collectionName: string,
-  constraints: QueryConstraint[],
-): Promise<number> {
-  const snapshot = await getCountFromServer(
-    query(collection(db, collectionName), ...constraints),
-  );
-  return snapshot.data().count;
-}
-
-async function getStationCount(
-  stationId: string,
-  constraints: QueryConstraint[],
-  eventIds?: string[],
-): Promise<number> {
-  const baseConstraints = [where("id", "==", stationId), ...constraints];
-
-  if (!eventIds) {
-    return getCount("stationStatuses", baseConstraints);
-  }
-
-  if (eventIds.length === 0) {
-    return 0;
-  }
-
-  const counts = await Promise.all(
-    chunkValues(eventIds, FIRESTORE_IN_QUERY_LIMIT).map((chunk) =>
-      getCount("stationStatuses", [
-        ...baseConstraints,
-        where("eventId", "in", chunk),
-      ]),
-    ),
-  );
-
-  return counts.reduce((total, count) => total + count, 0);
-}
-
 export async function getDashboardEventOptions(): Promise<
   DashboardEventOption[]
 > {
@@ -837,8 +789,11 @@ export async function saveCustomerToFirebase(
   // are keyed by email rather than the participant id; writing to the id key
   // for those would create a duplicate document.
   const documentId = customer.firestoreDocId || participantId;
-  const { Events, firestoreDocId: _firestoreDocId, ...customerWithoutEvents } =
-    customer;
+  const {
+    Events,
+    firestoreDocId: _firestoreDocId,
+    ...customerWithoutEvents
+  } = customer;
   const payload = toSerializable({
     ...customerWithoutEvents,
     Email: normalizedEmail ?? customer.Email,
@@ -975,8 +930,11 @@ async function saveEventDocToFirebase(
   event: EventRecord,
   participantId: string,
 ): Promise<void> {
-  const { stationStatuses, firestoreDocId: _firestoreDocId, ...eventFields } =
-    event;
+  const {
+    stationStatuses,
+    firestoreDocId: _firestoreDocId,
+    ...eventFields
+  } = event;
   const eventPayload = toSerializable({
     ...eventFields,
     participantId,
