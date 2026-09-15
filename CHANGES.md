@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-15 — Event Dashboard: Correct Event Dropdown and Registered Count
+
+### Problem
+
+The Event Dashboard had two related bugs:
+
+1. **Invalid/test events in the dropdown** — The dropdown was populated from the raw `events` Firestore collection (one document per participant-event pair), so any event name that ever appeared in a registration — including test submissions — showed up as a selectable option.
+
+2. **Registered count showed 85 instead of 56** — The dashboard was counting event *records*, not unique *participants*. 85 event records existed for 56 unique customers because some customers had more than one event record linked to the same catalog entry. The Participants page counts customers (one row per person); the dashboard was counting event documents.
+
+#### Root causes
+
+- `getDashboardEventOptions()` read from the `events` collection instead of the `registrationEvents` catalog. The Participants page correctly reads from `registrationEvents`.
+- `getDashboardStats()` used Firestore aggregate queries directly against the `events` collection, where `registrationEventId` is not reliably stored on older documents, making per-event filtering unreliable.
+- The count aggregation pushed all matching event records per customer (`...candidates`) rather than picking one per customer, so customers with duplicate event records were counted multiple times.
+
+---
+
+### Changes
+
+#### `src/DataControl.ts`
+
+- **`DashboardEventOption`** gained an `id` field (the `registrationEvents` catalog document ID).
+- **`getDashboardEventOptions()`** now reads from `registrationEvents` (same source as the Participants page) instead of the raw `events` collection. Test/invalid events no longer appear in the dropdown.
+- **`getDashboardStats(viewMode, selectedEventId, selectedEventName)`** — signature extended with `selectedEventId`. The function now uses `getCustomers()` as its data source (same as the Participants page) so that event-to-catalog matching is resolved in memory correctly. Filtering uses the same two-tier logic as the Participants page: `registrationEventId` match first, then `eventName` fallback for legacy records. Counts one entry per customer (most recent matching event), consistent with how the Participants page counts rows.
+- The "all events" mode fetches the `registrationEvents` catalog and only counts customers whose most recent event is linked to a known catalog entry.
+
+#### `src/pages/Dashboard.tsx`
+
+- State renamed from `selectedEventName` to `selectedEventId`; the dropdown is now keyed and valued by catalog entry ID.
+- `loadDashboardData` resolves both `selectedEventId` and `selectedEventName` from the catalog options and passes both to `getDashboardStats`.
+- `getStatsFromCustomers` (fallback path) updated to accept `selectedEventId`, apply the same two-tier match, and count one event per customer.
+
+#### `src/DataControl.dashboard.test.ts`
+
+- Mock extended to handle the `participants`, `events`, `stationStatuses`, and `registrationEvents` collections.
+- Tests updated to cover: catalog-sourced dropdown, per-customer deduplication, `registrationEventId`-based filtering, name fallback for legacy records, and exclusion of non-catalog entries in "all events" mode.
+
 ## 2026-09-09 — Participants Page Event Filter Fix
 
 ### Problem
