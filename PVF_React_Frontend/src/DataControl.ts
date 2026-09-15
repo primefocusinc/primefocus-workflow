@@ -173,6 +173,7 @@ export interface DashboardStats {
 }
 
 export interface DashboardEventOption {
+  id: string;
   eventName: string;
   eventDate: string;
   createdAt: string;
@@ -660,27 +661,21 @@ async function getStationCount(
 export async function getDashboardEventOptions(): Promise<
   DashboardEventOption[]
 > {
-  const eventsSnapshot = await getDocs(collection(db, "events"));
-  const byName = new Map<string, DashboardEventOption>();
-
-  for (const eventDoc of eventsSnapshot.docs) {
-    const data = eventDoc.data() as Partial<EventRecord>;
-    if (!data.eventName) {
-      continue;
-    }
-
-    const option = {
-      eventName: data.eventName,
-      eventDate: data.eventDate ?? "",
-      createdAt: data.createdAt ?? "",
-    };
-    const existing = byName.get(data.eventName);
-    if (!existing || sortEventOptionByRecency(option, existing) < 0) {
-      byName.set(data.eventName, option);
-    }
-  }
-
-  return Array.from(byName.values()).sort(sortEventOptionByRecency);
+  // Read from the admin-curated registrationEvents catalog — the same source
+  // used by the Participants page — so that test/invalid events never appear.
+  const snapshot = await getDocs(collection(db, "registrationEvents"));
+  return snapshot.docs
+    .map((docSnapshot) => {
+      const data = docSnapshot.data() as Partial<RegistrationEventOption>;
+      return {
+        id: docSnapshot.id,
+        eventName: data.eventName ?? "",
+        eventDate: data.eventDate ?? "",
+        createdAt: data.createdAt ?? "",
+      };
+    })
+    .filter((option) => option.eventName)
+    .sort(sortEventOptionByRecency);
 }
 
 function sortEventOptionByRecency(
@@ -707,67 +702,98 @@ function sortEventOptionByRecency(
 
 export async function getDashboardStats(
   viewMode: "this" | "all",
+  selectedEventId: string,
   selectedEventName: string,
 ): Promise<DashboardStats> {
-  let eventIds: string[] | undefined;
-  let registered = 0;
+  // Use getCustomers() as the source of truth so that registrationEventId is
+  // resolved in-memory (including legacy records that pre-date the field being
+  // stored in Firestore). This mirrors the Participants page filtering logic
+  // exactly and avoids the mismatch between Firestore-stored event docs (where
+  // registrationEventId may be absent) and the catalog.
+  const [customers, catalogEvents] = await Promise.all([
+    getCustomers(),
+    getRegistrationEvents(),
+  ]);
 
-  if (viewMode === "this") {
-    if (!selectedEventName) {
-      return createEmptyDashboardStats();
+  const catalogIdSet = new Set(catalogEvents.map((e) => e.id));
+  const catalogNameSet = new Set(
+    catalogEvents.map((e) => e.eventName.trim().toLowerCase()),
+  );
+
+  // Collect the relevant EventRecord for each customer using the same two-tier
+  // match as the Participants page: registrationEventId first, then event name
+  // as a fallback for legacy records that have no registrationEventId.
+  const relevantEvents: EventRecord[] = [];
+
+  for (const customer of customers) {
+    const allEvents = customer.Events ?? [];
+
+    const candidates =
+      viewMode === "all"
+        ? allEvents.filter(
+            (event) =>
+              // Must belong to a known catalog entry to exclude test/invalid events.
+              catalogIdSet.has(event.registrationEventId ?? "") ||
+              (!event.registrationEventId &&
+                catalogNameSet.has(event.eventName.trim().toLowerCase())),
+          )
+        : allEvents.filter(
+            (event) =>
+              // Primary: stable catalog ID stored on the event record.
+              event.registrationEventId === selectedEventId ||
+              // Fallback: legacy records without registrationEventId matched by name.
+              (!event.registrationEventId &&
+                selectedEventName &&
+                event.eventName.trim().toLowerCase() ===
+                  selectedEventName.trim().toLowerCase()),
+          );
+
+    // Count at most one event per customer (the most recent matching one),
+    // consistent with how the Participants page counts unique participants.
+    const latest = [...candidates].sort((a, b) => {
+      const at = Date.parse(a.createdAt || a.eventDate || "1970-01-01");
+      const bt = Date.parse(b.createdAt || b.eventDate || "1970-01-01");
+      return bt - at;
+    })[0];
+    if (latest) {
+      relevantEvents.push(latest);
     }
-
-    const eventsSnapshot = await getDocs(
-      query(
-        collection(db, "events"),
-        where("eventName", "==", selectedEventName),
-      ),
-    );
-    eventIds = eventsSnapshot.docs.map((eventDoc) => eventDoc.id);
-    registered = eventIds.length;
-  } else {
-    registered = await getCount("events", []);
   }
 
-  const [
-    checkedIn,
-    screened,
-    passed,
-    failed,
-    examCompleted,
-    examInQueue,
-    referralOut,
-    rxFrameSelected,
-  ] = await Promise.all([
-    getStationCount("check-in", [where("status", "==", "complete")], eventIds),
-    getStationCount(
-      "vision-screening",
-      [where("status", "==", "complete")],
-      eventIds,
-    ),
-    getStationCount(
-      "vision-screening",
-      [where("decision", "==", "PASS")],
-      eventIds,
-    ),
-    getStationCount(
-      "vision-screening",
-      [where("decision", "==", "FAIL")],
-      eventIds,
-    ),
-    getStationCount("eye-exam", [where("status", "==", "complete")], eventIds),
-    getStationCount("eye-exam", [where("status", "==", "current")], eventIds),
-    getStationCount(
-      "eye-exam",
-      [where("decision", "==", "REFERRAL")],
-      eventIds,
-    ),
-    getStationCount(
-      "frame-selection",
-      [where("status", "==", "complete")],
-      eventIds,
-    ),
-  ]);
+  if (viewMode === "this" && !selectedEventId && !selectedEventName) {
+    return createEmptyDashboardStats();
+  }
+
+  const registered = relevantEvents.length;
+  const checkedIn = relevantEvents.filter(
+    (event) => findStationInEvent(event, "check-in")?.status === "complete",
+  ).length;
+  const screened = relevantEvents.filter(
+    (event) =>
+      findStationInEvent(event, "vision-screening")?.status === "complete",
+  ).length;
+  const passed = relevantEvents.filter(
+    (event) =>
+      findStationInEvent(event, "vision-screening")?.decision === "PASS",
+  ).length;
+  const failed = relevantEvents.filter(
+    (event) =>
+      findStationInEvent(event, "vision-screening")?.decision === "FAIL",
+  ).length;
+  const examCompleted = relevantEvents.filter(
+    (event) => findStationInEvent(event, "eye-exam")?.status === "complete",
+  ).length;
+  const examInQueue = relevantEvents.filter(
+    (event) => findStationInEvent(event, "eye-exam")?.status === "current",
+  ).length;
+  const referralOut = relevantEvents.filter(
+    (event) => findStationInEvent(event, "eye-exam")?.decision === "REFERRAL",
+  ).length;
+  const rxFrameSelected = relevantEvents.filter(
+    (event) =>
+      findStationInEvent(event, "eye-exam")?.decision === "FRAME" &&
+      findStationInEvent(event, "frame-selection")?.status === "complete",
+  ).length;
 
   return {
     registered,
@@ -781,6 +807,13 @@ export async function getDashboardStats(
     referralOut,
     rxFrameSelected,
   };
+}
+
+function findStationInEvent(
+  event: EventRecord,
+  stationId: string,
+): StationStatus | undefined {
+  return event.stationStatuses.find((s) => s.id === stationId);
 }
 
 export async function saveRegistrationCustomer(

@@ -76,20 +76,26 @@ function getEventOptionsFromCustomers(customers: CustomerRecord[]): DashboardEve
   }
 
   return Array.from(byName.values()).sort(sortEventsByRecency).map(event => ({
+    id: event.registrationEventId ?? '',
     eventName: event.eventName,
     eventDate: event.eventDate,
     createdAt: event.createdAt
   }));
 }
 
-function getStatsFromCustomers(customers: CustomerRecord[], viewMode: 'this' | 'all', selectedEventName: string): DashboardStats {
+function getStatsFromCustomers(customers: CustomerRecord[], viewMode: 'this' | 'all', selectedEventId: string, selectedEventName: string): DashboardStats {
   const relevantEvents: EventRecord[] = [];
 
   for (const customer of customers) {
+    const allEvents = customer.Events ?? [];
     const candidates = viewMode === 'all'
-      ? (customer.Events ?? [])
-      : (customer.Events ?? []).filter(event => event.eventName === selectedEventName);
+      ? allEvents
+      : allEvents.filter(event =>
+          event.registrationEventId === selectedEventId ||
+          (!event.registrationEventId && selectedEventName && event.eventName === selectedEventName)
+        );
 
+    // One entry per customer — the most recent matching event.
     const latest = [...candidates].sort(sortEventsByRecency)[0];
     if (latest) {
       relevantEvents.push(latest);
@@ -116,7 +122,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'this' | 'all'>('this');
-  const [selectedEventName, setSelectedEventName] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState('');
   const [eventOptions, setEventOptions] = useState<DashboardEventOption[]>([]);
   const [stats, setStats] = useState<DashboardStats>(() => createEmptyStats());
   const [refreshError, setRefreshError] = useState('');
@@ -129,13 +135,15 @@ export default function Dashboard() {
 
     try {
       const options = await getDashboardEventOptions();
-      const nextSelectedEventName = viewMode === 'this'
-        ? selectedEventName || options[0]?.eventName || ''
-        : selectedEventName;
-      const nextStats = await getDashboardStats(viewMode, nextSelectedEventName);
+      const nextSelectedEvent = viewMode === 'this'
+        ? (options.find(o => o.id === selectedEventId) ?? options[0] ?? null)
+        : null;
+      const nextSelectedEventId = nextSelectedEvent?.id ?? '';
+      const nextSelectedEventName = nextSelectedEvent?.eventName ?? '';
+      const nextStats = await getDashboardStats(viewMode, nextSelectedEventId, nextSelectedEventName);
 
       setEventOptions(options);
-      setSelectedEventName(nextSelectedEventName);
+      setSelectedEventId(nextSelectedEventId);
       setStats(nextStats);
       setRefreshError('');
       setNow(new Date());
@@ -143,20 +151,22 @@ export default function Dashboard() {
       console.warn('Unable to load aggregate dashboard stats; falling back to participant data.', error);
       const customers = await getCustomers();
       const fallbackOptions = getEventOptionsFromCustomers(customers);
-      const nextSelectedEventName = viewMode === 'this'
-        ? selectedEventName || fallbackOptions[0]?.eventName || ''
-        : selectedEventName;
+      const nextSelectedEvent = viewMode === 'this'
+        ? (fallbackOptions.find(o => o.id === selectedEventId) ?? fallbackOptions[0] ?? null)
+        : null;
+      const nextSelectedEventId = nextSelectedEvent?.id ?? '';
+      const nextSelectedEventName = nextSelectedEvent?.eventName ?? '';
 
       setEventOptions(fallbackOptions);
-      setSelectedEventName(nextSelectedEventName);
-      setStats(getStatsFromCustomers(customers, viewMode, nextSelectedEventName));
+      setSelectedEventId(nextSelectedEventId);
+      setStats(getStatsFromCustomers(customers, viewMode, nextSelectedEventId, nextSelectedEventName));
       setRefreshError('Dashboard is using fallback participant reads because aggregate counts could not be loaded.');
       setNow(new Date());
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedEventName, viewMode]);
+  }, [selectedEventId, viewMode]);
 
   useEffect(() => {
     loadDashboardData();
@@ -224,8 +234,8 @@ export default function Dashboard() {
               </button>
             </div>
             <select
-              value={selectedEventName}
-              onChange={(changeEvent) => setSelectedEventName(changeEvent.target.value)}
+              value={selectedEventId}
+              onChange={(changeEvent) => setSelectedEventId(changeEvent.target.value)}
               disabled={viewMode === 'all' || eventOptions.length === 0}
               className="rounded-[10px] border border-[#2b3a46] bg-[#18232c] px-3.5 py-2 text-sm font-semibold text-[#d5dce0] disabled:opacity-50"
             >
@@ -233,7 +243,7 @@ export default function Dashboard() {
                 <option value="">No events yet</option>
               ) : (
                 eventOptions.map(event => (
-                  <option key={event.eventName} value={event.eventName}>
+                  <option key={event.id} value={event.id}>
                     {event.eventName} — {event.eventDate}
                   </option>
                 ))
